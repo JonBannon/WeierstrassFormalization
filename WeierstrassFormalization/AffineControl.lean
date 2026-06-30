@@ -151,6 +151,11 @@ particular every target value is attained by some `c`. -/
 theorem exists_c_taylorCoeff_mul_E_succ_eq {h : ℂ → ℂ} (hh : AnalyticAt ℂ h 0) (hh0 : h 0 = 1)
     {a : ℂ} (ha : a ≠ 0) (n : ℕ) (target : ℂ) :
     ∃ c : ℂ, taylorCoeff (fun z => h z * E n c (z / a)) (n + 1) = target := by
-  sorry
+  have hn1 : ((n : ℂ) + 1) ≠ 0 := by exact_mod_cast Nat.succ_ne_zero n
+  have ha_pow : a ^ (n + 1) ≠ 0 := pow_ne_zero _ ha
+  refine ⟨1 + (target - taylorCoeff h (n + 1)) * (((n : ℂ) + 1) * a ^ (n + 1)), ?_⟩
+  rw [taylorCoeff_mul_E_succ hh hh0 ha n]
+  field_simp [hn1, ha_pow]
+  ring
 
 end Weierstrass
