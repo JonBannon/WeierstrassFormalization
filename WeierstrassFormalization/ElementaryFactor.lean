@@ -96,7 +96,12 @@ theorem E_eq_exp_G {n : ℕ} {c w : ℂ} (hw : w ∈ 𝔻) :
 
 /-- **Lemma `lem:structure` (i).** `E_n(0;c) = 1`. -/
 theorem E_zero (n : ℕ) (c : ℂ) : E n c 0 = 1 := by
-  sorry
+  unfold E
+  have hsum : ∑ k ∈ Finset.Icc 1 n, (0 : ℂ) ^ k / k = 0 := by
+    refine Finset.sum_eq_zero (fun k hk => ?_)
+    rw [Finset.mem_Icc] at hk
+    simp [zero_pow (Nat.one_le_iff_ne_zero.mp hk.1)]
+  simp [hsum]
 
 /-- **Lemma `lem:structure` (ii).** The Taylor coefficients of degree
 `1, …, n` of `E_n(·;c)` vanish, independently of `c`. -/
