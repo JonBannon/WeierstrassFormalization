@@ -24,8 +24,8 @@ open Complex
 /-- **Lemma `lem:affine` (i).** Introducing the factor `E_n(z/a;c)` leaves
 all Taylor coefficients of degree `≤ n` of `F = h · E_n(·/a;c)` unchanged,
 independently of `c`. -/
-theorem taylorCoeff_mul_E_eq_of_le {h : ℂ → ℂ} (hh : AnalyticAt ℂ h 0) (hh0 : h 0 = 1)
-    {a c : ℂ} (ha : a ≠ 0) {n m : ℕ} (hmn : m ≤ n) :
+theorem taylorCoeff_mul_E_eq_of_le {h : ℂ → ℂ} (hh : AnalyticAt ℂ h 0)
+    {a c : ℂ} {n m : ℕ} (hmn : m ≤ n) :
     taylorCoeff (fun z => h z * E n c (z / a)) m = taylorCoeff h m := by
   -- Rewrite `z / a` as `a⁻¹ * z` to use the constant-multiple composition rule.
   have hEq : (fun z : ℂ => E n c (z / a)) = fun z : ℂ => E n c (a⁻¹ * z) := by
