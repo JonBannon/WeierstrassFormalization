@@ -226,7 +226,121 @@ theorem exists_Mtest_of_coeffSeq (a c : ℕ → ℂ) (ha0 : ∀ k, a k ≠ 0)
     (hc : ∀ k, ‖c k - 1‖ ≤ Real.sqrt 2 / 2 * (k + 1) * ‖a k‖ ^ (k + 1)) :
     ∀ K ⊆ 𝔻, IsCompact K → ∃ u : ℕ → ℝ, Summable u ∧
       ∀ k, ∀ z ∈ K, ‖E k (c k) (z / a k) - 1‖ ≤ u k := by
-  sorry
+  classical
+  intro K hKsub hKcpt
+  rcases K.eq_empty_or_nonempty with hKe | hKne
+  · exact ⟨fun _ => 0, summable_zero, by simp [hKe]⟩
+  -- `K` sits inside a closed disk of radius `r < 1`.
+  obtain ⟨z₀, hz₀K, hz₀max⟩ :=
+    hKcpt.exists_isMaxOn hKne (continuous_norm.continuousOn (s := K))
+  set r : ℝ := ‖z₀‖ with hr_def
+  have hr0 : 0 ≤ r := norm_nonneg _
+  have hr1 : r < 1 := mem_𝔻_iff.mp (hKsub hz₀K)
+  have hKr : ∀ z ∈ K, ‖z‖ ≤ r := fun z hz => hz₀max hz
+  set s : ℝ := (r + 1) / 2 with hs_def
+  have hrs : r < s := by rw [hs_def]; linarith
+  have hs1 : s < 1 := by rw [hs_def]; linarith
+  have hs0 : 0 < s := by linarith
+  have hrs0 : 0 ≤ r / s := div_nonneg hr0 hs0.le
+  have hrs1 : r / s < 1 := (div_lt_one hs0).mpr hrs
+  -- the finite exceptional set of `k` with `a k` too close to `0`.
+  set F : Set ℕ := {k | ‖a k‖ < s} with hF_def
+  have hFfin : F.Finite := hesc s hs1
+  -- the summable geometric majorant.
+  set B : ℕ → ℝ := fun k => Real.sqrt 2 / 2 * r ^ (k + 1) + (r / s) ^ (k + 2) / (1 - r / s)
+    with hB_def
+  have hBnonneg : ∀ k, 0 ≤ B k := fun k => by
+    have : (0:ℝ) < 1 - r / s := by linarith
+    positivity
+  have hSummable_r : Summable (fun k : ℕ => r ^ (k + 1)) := by
+    have := (summable_geometric_of_lt_one hr0 hr1).mul_left r
+    simpa [pow_succ, mul_comm] using this
+  have hSummable_rs : Summable (fun k : ℕ => (r / s) ^ (k + 2)) := by
+    have := (summable_geometric_of_lt_one hrs0 hrs1).mul_left ((r / s) ^ 2)
+    simpa [pow_add, mul_comm] using this
+  have hBsummable : Summable B := by
+    have h1 : Summable (fun k => Real.sqrt 2 / 2 * r ^ (k + 1)) := hSummable_r.mul_left _
+    have h2 : Summable (fun k => (r / s) ^ (k + 2) / (1 - r / s)) := by
+      simpa [div_eq_mul_inv, mul_comm] using hSummable_rs.mul_right (1 - r / s)⁻¹
+    simpa [hB_def] using h1.add h2
+  -- `B k → 0`, so `B k < 1/2` eventually.
+  have hBtendsto : Filter.Tendsto B Filter.atTop (nhds 0) := hBsummable.tendsto_atTop_zero
+  obtain ⟨N, hN⟩ := Metric.tendsto_atTop.mp hBtendsto (1 / 2) (by norm_num)
+  have hNbound : ∀ k, N ≤ k → B k < 1 / 2 := by
+    intro k hk
+    have := hN k hk
+    rwa [Real.dist_eq, sub_zero, abs_of_nonneg (hBnonneg k)] at this
+  -- the finite "bad" set: too close to `0`, or not yet small.
+  set Bad : Set ℕ := F ∪ {k | k < N} with hBad_def
+  have hBadFin : Bad.Finite := hFfin.union (Set.finite_Iio N)
+  -- for the finitely many bad indices, bound by the actual maximum on `K`.
+  have hMbound : ∀ k, ∃ M : ℝ, ∀ z ∈ K, ‖E k (c k) (z / a k) - 1‖ ≤ M := by
+    intro k
+    have h1 : ContinuousOn (fun z : ℂ => z / a k) K := by fun_prop
+    have h2 : Continuous (E k (c k)) := by unfold E; fun_prop
+    have hcont : ContinuousOn (fun z => ‖E k (c k) (z / a k) - 1‖) K :=
+      ((h2.comp_continuousOn h1).sub continuousOn_const).norm
+    obtain ⟨zmax, hzmaxK, hzmaxmax⟩ := hKcpt.exists_isMaxOn hKne hcont
+    exact ⟨_, fun z hz => hzmaxmax hz⟩
+  choose M hM using hMbound
+  refine ⟨fun k => (if k ∈ Bad then max (M k) 0 else 0) + 2 * B k, ?_, ?_⟩
+  · refine Summable.add ?_ (hBsummable.mul_left 2)
+    exact (hasSum_sum_of_ne_finset_zero
+      (s := hBadFin.toFinset) (fun b hb => by simp [Set.Finite.mem_toFinset] at hb; simp [hb])
+      ).summable
+  · intro k z hz
+    by_cases hkBad : k ∈ Bad
+    · simp only [hkBad, if_true]
+      have := hM k z hz
+      have hM0 : M k ≤ max (M k) 0 := le_max_left _ _
+      have : 0 ≤ 2 * B k := by positivity
+      linarith [hM k z hz]
+    · simp only [hkBad, if_false, zero_add]
+      -- `k` is neither in `F` nor small: apply the quantitative estimate.
+      rw [hBad_def, Set.mem_union, hF_def] at hkBad
+      push Not at hkBad
+      obtain ⟨hkF, hkN⟩ := hkBad
+      have hak0 : a k ≠ 0 := ha0 k
+      have haks : s ≤ ‖a k‖ := not_lt.mp hkF
+      have hakN : N ≤ k := not_lt.mp hkN
+      have hakpos : 0 < ‖a k‖ := lt_of_lt_of_le hs0 haks
+      set ρ : ℝ := r / ‖a k‖ with hρ_def
+      have hρ0 : 0 ≤ ρ := div_nonneg hr0 hakpos.le
+      have hρs : ρ ≤ r / s := div_le_div_of_nonneg_left hr0 hs0 haks
+      have hρ1 : ρ < 1 := lt_of_le_of_lt hρs hrs1
+      have hzk : ‖z / a k‖ ≤ ρ := by
+        rw [norm_div, hρ_def]
+        gcongr
+        exact hKr z hz
+      -- apply the quantitative bound on `G`
+      have hGbound := norm_G_le k (c k) (z / a k) hρ0 hρ1 hzk
+      have haffine : ‖c k - 1‖ / (k + 1) * ρ ^ (k + 1) ≤ Real.sqrt 2 / 2 * r ^ (k + 1) := by
+        have h1 : ‖c k - 1‖ / (k + 1) ≤ Real.sqrt 2 / 2 * ‖a k‖ ^ (k + 1) := by
+          rw [div_le_iff₀ (by positivity : (0:ℝ) < (k:ℝ) + 1)]
+          calc ‖c k - 1‖ ≤ Real.sqrt 2 / 2 * (k + 1) * ‖a k‖ ^ (k + 1) := hc k
+            _ = Real.sqrt 2 / 2 * ‖a k‖ ^ (k + 1) * ((k:ℝ) + 1) := by ring
+        calc ‖c k - 1‖ / (k + 1) * ρ ^ (k + 1)
+            ≤ (Real.sqrt 2 / 2 * ‖a k‖ ^ (k + 1)) * ρ ^ (k + 1) := by gcongr
+          _ = Real.sqrt 2 / 2 * (‖a k‖ * ρ) ^ (k + 1) := by rw [mul_pow]; ring
+          _ = Real.sqrt 2 / 2 * r ^ (k + 1) := by
+              rw [hρ_def, mul_div_cancel₀ _ (ne_of_gt hakpos)]
+      have htail : ρ ^ (k + 2) / (1 - ρ) ≤ (r / s) ^ (k + 2) / (1 - r / s) := by
+        have h2 : (0:ℝ) < 1 - r / s := by linarith
+        have h4 : 1 - r / s ≤ 1 - ρ := by linarith
+        calc ρ ^ (k + 2) / (1 - ρ)
+            ≤ (r / s) ^ (k + 2) / (1 - ρ) := by gcongr
+          _ ≤ (r / s) ^ (k + 2) / (1 - r / s) :=
+              div_le_div_of_nonneg_left (by positivity) h2 h4
+      have hGbound2 : ‖G k (c k) (z / a k)‖ ≤ B k :=
+        hGbound.trans (add_le_add haffine htail)
+      have hGlt_half : ‖G k (c k) (z / a k)‖ < 1 / 2 :=
+        lt_of_le_of_lt hGbound2 (hNbound k hakN)
+      have hGle1 : ‖G k (c k) (z / a k)‖ ≤ 1 := by linarith
+      have hzk𝔻 : z / a k ∈ 𝔻 := mem_𝔻_iff.mpr (lt_of_le_of_lt hzk hρ1)
+      rw [E_eq_exp_G hzk𝔻]
+      calc ‖Complex.exp (G k (c k) (z / a k)) - 1‖
+          ≤ 2 * ‖G k (c k) (z / a k)‖ := Complex.norm_exp_sub_one_le hGle1
+        _ ≤ 2 * B k := by linarith
 
 /-! ## Convergence and holomorphy of the infinite product -/
 
