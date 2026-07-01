@@ -12,30 +12,19 @@ standard three (`propext`, `Classical.choice`, `Quot.sound`).
 
 ## Documentation
 
-* **[Blueprint](blueprint/src/content.tex)** — an expository account of
-  every definition and theorem, each tagged with the Lean declaration that
-  formalizes it and (once the site is deployed, see below) rendered as a
-  browsable web page with a dependency graph.
-* **API documentation** is generated from the Lean source's module and
-  declaration doc-strings via `doc-gen4`.
+API documentation is generated from the Lean source's module and
+declaration doc-strings via [`doc-gen4`](https://github.com/leanprover-community/doc-gen4),
+built automatically by CI (`.github/workflows/lean_action_ci.yml`, via
+[`docgen-action`](https://github.com/leanprover-community/docgen-action))
+and deployed to GitHub Pages on every push to the default branch, once
+Pages is enabled (see below).
 
-Both are built automatically by CI (`.github/workflows/lean_action_ci.yml`,
-via [`docgen-action`](https://github.com/leanprover-community/docgen-action)
-with `blueprint: true`) and deployed to GitHub Pages on every push to the
-default branch, once Pages is enabled (see below). Locally:
+The paper itself, revised to note this formalization, is at
+[`integer_weierstrass_18.tex`](integer_weierstrass_18.tex).
 
 ```sh
 # Build and check the Lean project
 lake build
-
-# Verify every `\lean{...}` declaration cited in the blueprint really
-# exists (the same check CI runs)
-lake exe checkdecls blueprint/lean_decls
-
-# Build the blueprint (requires Python and a TeX distribution with
-# `latexmk`; install the tool with `pip install leanblueprint`)
-leanblueprint pdf   # -> blueprint/print/print.pdf
-leanblueprint web   # -> blueprint/web/index.html
 ```
 
 ## Project layout
