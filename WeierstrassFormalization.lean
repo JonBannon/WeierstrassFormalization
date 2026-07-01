@@ -7,3 +7,4 @@ import WeierstrassFormalization.GaussianRealization
 import WeierstrassFormalization.ComplexConjugation
 import WeierstrassFormalization.ConjugatePairing
 import WeierstrassFormalization.MainTheorem
+import WeierstrassFormalization.RingConsequences
