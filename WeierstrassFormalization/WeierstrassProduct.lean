@@ -714,6 +714,61 @@ private theorem tendsto_iteratedDeriv_of_tendstoLocallyUniformlyOn
       simp only [iteratedDeriv_succ']
       exact ih hderivdiff hderivconv
 
+/-! ## The order of vanishing of a single factor -/
+
+private theorem analyticOrderAt_E_one (n : ℕ) (c : ℂ) : analyticOrderAt (E n c) 1 = 1 := by
+  have hlin : AnalyticAt ℂ (fun w : ℂ => (1 : ℂ) - w) 1 := by fun_prop
+  have hlin_deriv : deriv (fun w : ℂ => (1 : ℂ) - w) 1 ≠ 0 := by
+    have hd : deriv (fun w : ℂ => (1 : ℂ) - w) = fun _ => (-1 : ℂ) := by
+      funext w
+      have hc' : HasDerivAt (fun _ : ℂ => (1 : ℂ)) (0 : ℂ) w := hasDerivAt_const w 1
+      have hid' : HasDerivAt (fun w : ℂ => w) (1 : ℂ) w := hasDerivAt_id w
+      have h1 : HasDerivAt (fun w : ℂ => (1 : ℂ) - w) ((0 : ℂ) - 1) w := hc'.sub hid'
+      simp [h1.deriv]
+    rw [hd]; norm_num
+  have hlin_order : analyticOrderAt (fun w : ℂ => (1 : ℂ) - w) 1 = 1 :=
+    hlin.analyticOrderAt_eq_one_of_zero_deriv_ne_zero (by norm_num) hlin_deriv
+  have hexp : AnalyticAt ℂ (fun w : ℂ => Complex.exp ((∑ k ∈ Finset.Icc 1 n, w ^ k / k)
+      + c * w ^ (n + 1) / (n + 1))) 1 := by fun_prop
+  have hexp_order : analyticOrderAt (fun w : ℂ => Complex.exp ((∑ k ∈ Finset.Icc 1 n, w ^ k / k)
+      + c * w ^ (n + 1) / (n + 1))) 1 = 0 :=
+    hexp.analyticOrderAt_eq_zero.mpr (Complex.exp_ne_zero _)
+  have hE_eq : E n c = fun w : ℂ => (1 - w) * Complex.exp ((∑ k ∈ Finset.Icc 1 n, w ^ k / k)
+      + c * w ^ (n + 1) / (n + 1)) := rfl
+  have hmul := analyticOrderAt_mul hlin hexp
+  rw [hlin_order, hexp_order, add_zero] at hmul
+  rw [hE_eq]
+  exact hmul
+
+private theorem analyticOrderAt_E_div_self (n : ℕ) (c p : ℂ) (hp : p ≠ 0) :
+    analyticOrderAt (fun w => E n c (w / p)) p = 1 := by
+  have hg : AnalyticAt ℂ (fun w : ℂ => w / p) p := by fun_prop
+  have hg' : deriv (fun w : ℂ => w / p) p ≠ 0 := by
+    have hd : deriv (fun w : ℂ => w / p) = fun _ => (p : ℂ)⁻¹ := by
+      funext w
+      have hid' : HasDerivAt (fun w : ℂ => w) (1 : ℂ) w := hasDerivAt_id w
+      have h1 : HasDerivAt (fun w : ℂ => w / p) (1 * p⁻¹) w := by
+        simpa [div_eq_mul_inv] using hid'.mul_const p⁻¹
+      simp [h1.deriv]
+    rw [hd]; exact inv_ne_zero hp
+  have hcomp := analyticOrderAt_comp_of_deriv_ne_zero (f := E n c) hg hg'
+  rw [show (fun w => E n c (w / p)) = (E n c) ∘ (fun w : ℂ => w / p) from rfl, hcomp]
+  rw [div_self hp]
+  exact analyticOrderAt_E_one n c
+
+private theorem analyticOrderAt_factor (n : ℕ) (c p z : ℂ) (hp : p ≠ 0) :
+    analyticOrderAt (fun w => E n c (w / p)) z = if z = p then 1 else 0 := by
+  split_ifs with hzp
+  · rw [hzp]; exact analyticOrderAt_E_div_self n c p hp
+  · have hne : E n c (z / p) ≠ 0 := by
+      rw [Ne, E_zero_iff, div_eq_one_iff_eq hp]
+      exact hzp
+    have hanalytic : AnalyticAt ℂ (fun w => E n c (w / p)) z := by
+      have h1 : AnalyticAt ℂ (fun w : ℂ => w / p) z := by fun_prop
+      have h2 : AnalyticAt ℂ (E n c) (z / p) := by unfold E; fun_prop
+      exact AnalyticAt.comp (f := fun w : ℂ => w / p) (x := z) h2 h1
+    exact hanalytic.analyticOrderAt_eq_zero.mpr hne
+
 /-! ## The zero divisor of the product -/
 
 /-- **Zero-divisor identification** (Section 3, proof of `prop:Zi`, Step 4).
