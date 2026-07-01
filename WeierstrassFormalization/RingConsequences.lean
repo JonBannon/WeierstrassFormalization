@@ -654,4 +654,44 @@ theorem cor_ideals {I : Set (ℂ → ℂ)} (hI : IsIdealOD I) {f : ℂ → ℂ} 
     refine hI.congr_on_𝔻 _ hprod_mem f hf (fun z hz => ?_)
     rw [hfeq z hz, mul_comm]
 
+/-! ## Proposition `prop:inject`: injectivity of the contraction map -/
+
+/-- `m` is a maximal ideal of `𝒪(𝔻)`. -/
+structure IsMaximalIdealOD (m : Set (ℂ → ℂ)) : Prop where
+  isIdeal : IsIdealOD m
+  proper : m ≠ {f | HolomorphicOn f}
+  maximal : ∀ J, IsIdealOD J → m ⊆ J → J = m ∨ J = {f | HolomorphicOn f}
+
+/-- **Proposition `prop:inject`.** The contraction map `φ : 𝔪 ↦ 𝔪 ∩ ℛ`, from maximal ideals of
+`𝒪(𝔻)` to (the carriers of) prime ideals of `ℛ`, is injective. -/
+theorem prop_inject {m m' : Set (ℂ → ℂ)} (hm : IsMaximalIdealOD m) (hm' : IsMaximalIdealOD m')
+    (hcontract : {f | f ∈ m ∧ HasGaussianIntCoeffs f} = {f | f ∈ m' ∧ HasGaussianIntCoeffs f}) :
+    m = m' := by
+  have hsub : ∀ {a a' : Set (ℂ → ℂ)}, IsMaximalIdealOD a → IsMaximalIdealOD a' →
+      {f | f ∈ a ∧ HasGaussianIntCoeffs f} = {f | f ∈ a' ∧ HasGaussianIntCoeffs f} → a ⊆ a' := by
+    intro a a' ha ha' hcon f hfa
+    obtain ⟨g, u, hg_holo, hg_int, hu_holo, hu_nv, hu_eq⟩ :=
+      exists_hasGaussianIntCoeffs_mul_nowhereVanishing f (ha.isIdeal.subset_holomorphic f hfa)
+    have hu_inv_holo : HolomorphicOn (fun z => (u z)⁻¹) :=
+      fun z hz => (hu_holo z hz).inv (hu_nv z hz)
+    have hg_mem_a : (fun z => (u z)⁻¹ * f z) ∈ a := ha.isIdeal.smul_mem _ hu_inv_holo f hfa
+    have hg_eq : Set.EqOn (fun z => (u z)⁻¹ * f z) g 𝔻 := by
+      intro z hz
+      change (u z)⁻¹ * f z = g z
+      rw [hu_eq z hz, mul_comm (g z) (u z), ← mul_assoc, inv_mul_cancel₀ (hu_nv z hz), one_mul]
+    have hgA : g ∈ a := ha.isIdeal.congr_on_𝔻 _ hg_mem_a g hg_holo hg_eq
+    have hgA' : g ∈ a' := by
+      have hmem : g ∈ {f | f ∈ a ∧ HasGaussianIntCoeffs f} := ⟨hgA, hg_int⟩
+      rw [hcon] at hmem
+      exact hmem.1
+    have hprod_mem : (fun z => u z * g z) ∈ a' := ha'.isIdeal.smul_mem u hu_holo g hgA'
+    refine ha'.isIdeal.congr_on_𝔻 _ hprod_mem f (ha.isIdeal.subset_holomorphic f hfa)
+      (fun z hz => ?_)
+    rw [hu_eq z hz, mul_comm]
+  have hmm' : m ⊆ m' := hsub hm hm' hcontract
+  have hm'm : m' ⊆ m := hsub hm' hm hcontract.symm
+  rcases hm.maximal m' hm'.isIdeal hmm' with heq | htop
+  · exact heq.symm
+  · exact absurd htop hm'.proper
+
 end Weierstrass
