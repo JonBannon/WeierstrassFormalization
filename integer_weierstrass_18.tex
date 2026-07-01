@@ -26,14 +26,12 @@
 
 \title{Integer Coefficients Power Series\\with Prescribed Zero Sets }
 \author{Jon Bannon}\author{David Feldman}
-\thanks{Every definition, theorem, and proof in this paper --- including
-  both directions of Theorem~\ref{thm:main} and the Gaussian-integer
-  realization of Theorem~\ref{prop:Zi} --- has been formally verified in
-  the Lean~4 proof assistant, with no \texttt{sorry}s and no axioms
-  beyond Mathlib's standard \texttt{propext}, \texttt{Classical.choice},
-  and \texttt{Quot.sound}.  The Lean source is available at
-  \url{https://github.com/DavidVFeldman/WeierstrassFormalization}, with
-  Theorem~\ref{thm:main} proved in
+\thanks{Theorems~\ref{thm:main} and~\ref{prop:Zi} have been formalized
+  and machine-checked in the Lean~4 proof assistant (no
+  \texttt{sorry}s, no axioms beyond Mathlib's standard
+  \texttt{propext}, \texttt{Classical.choice}, and \texttt{Quot.sound}):
+  see \url{https://github.com/DavidVFeldman/WeierstrassFormalization},
+  with Theorem~\ref{thm:main} proved in
   \url{https://github.com/DavidVFeldman/WeierstrassFormalization/blob/master/WeierstrassFormalization/MainTheorem.lean}.}
 \date{}
 
@@ -60,9 +58,9 @@ nowhere-vanishing holomorphic factor.
 \section{Introduction}
 
 Transcendental number theory rests on the special nature of roots of
-polynomials with integer coefficients.  One might ask: what if we
-consider roots of power series with integer coefficients?  Two immediate
-observations change the picture.  First, a non-polynomial integer-coefficient
+polynomials with integer coefficients.  Considering instead roots of
+power series with integer coefficients changes the picture in two
+immediate ways.  First, a non-polynomial integer-coefficient
 power series has radius of convergence at most~$1$, so if it converges
 anywhere in $\C \setminus \Z$ it converges inside the unit disk $\D =
 \{z \in \C : \abs{z} < 1\}$, and analytic hypotheses must enter the
@@ -75,9 +73,9 @@ conjugation-stable divisor $[z_0] + [\bar z_0]$, already produces such
 series, in infinitely many ways since the construction is
 non-canonical).  Individual roots thus carry no arithmetic content.
 
-In search of an analogue, one
-can ask: what zero sets of holomorphic functions on $\D$ arise as the
-zero sets of integer power series?  An \emph{effective divisor} on $\D$
+The natural analogue asks which zero sets of holomorphic functions
+on $\D$ arise as the zero sets of integer power series.  An
+\emph{effective divisor} on $\D$
 is a locally finite formal sum $D = \sum_{a \in S} m_a [a]$ with
 non-negative integer multiplicities over a discrete subset $S \subset
 \D$, encoding a zero set with multiplicities.  For $D$ to be the zero
@@ -85,11 +83,8 @@ divisor of an integer-coefficient holomorphic function, the discreteness
 of $S$ is necessary (and automatic), and $D$ must be \emph{invariant
 under complex conjugation} ($m_{\bar a} = m_a$ for all $a$), since
 $f(\bar z) = \overline{f(z)}$ for real-coefficient power series forces
-nonreal zeros into conjugate pairs.  The main result is that conjugation
-invariance is the only arithmetic obstruction.
-
-The main result of this paper is that these two conditions are also
-sufficient.
+nonreal zeros into conjugate pairs.  Conjugation invariance turns out
+to be the only obstruction: it is also sufficient.
 
 \begin{theorem}
 \label{thm:main}
@@ -102,10 +97,10 @@ The necessity of conjugation invariance is immediate; sufficiency is
 the content.  Conceptually, the result may be viewed as an
 interpolation theorem inside the coefficient-restricted algebra
 $\Z[[z]] \cap \OD$: every divisor class has an arithmetic
-representative.  The construction is non-canonical --- different
-orderings of the zeros and different rounding choices yield different
-realizing functions --- and the coefficient sequences can vary
-substantially with these choices.
+representative.  The construction is non-canonical: different orderings
+of the zeros and different rounding choices yield different realizing
+functions, and the coefficient sequences can vary substantially with
+these choices.
 
 The technical heart of the paper is the following result, from which
 Theorem~\ref{thm:main} is deduced.  Write $\Zi = \Z[i]$ for the
@@ -124,16 +119,12 @@ divisor $D$ and $\Zi$-coefficients, then pair each complex zero with
 its conjugate to force all coefficients into $\Z$
 (Section~\ref{sec:proofs}).
 
-The construction common to both results deforms each classical Weierstrass
-elementary factor by a single free parameter.  The governing principle is:
-
-\begin{quote}
-\emph{Each modified factor of order $n$ leaves all Taylor coefficients
-of degree $\leq n$ unchanged, while shifting the coefficient of
-degree $n+1$ by a controlled affine amount.}
-\end{quote}
-
-This triangular structure allows coefficients to be rounded to integers
+The construction common to both results deforms each classical
+Weierstrass elementary factor by a single free parameter, governed by
+a simple principle: each modified factor of order $n$ leaves all
+Taylor coefficients of degree $\leq n$ unchanged, while shifting the
+coefficient of degree $n+1$ by a controlled affine amount.  This
+triangular structure allows coefficients to be rounded to integers
 one at a time without disturbing previously corrected coefficients and
 without affecting the convergence of the product.
 
@@ -171,11 +162,9 @@ approximate arbitrary functions on arbitrary compact sets).  Neither
 framework imposes arithmetic constraints on coefficients, and neither
 directly addresses the convergence-on-a-disk setting.  For rings of
 holomorphic functions with arithmetic coefficient conditions, see
-\cite{Stout} for background on analytic function algebras.  We have
-not found a prior result combining prescribed divisors with
-integrality of Taylor coefficients, though we have not exhaustively
-searched all adjacent literatures (arithmetic analytic functions,
-interpolation in subrings of $H(\D)$, random integer power series).
+\cite{Stout} for background on analytic function algebras.  We are not aware of a prior result combining prescribed divisors with
+integrality of Taylor coefficients, though our literature search was
+not exhaustive.
 
 The same construction, with zeros placed outside $\overline{\D}$,
 produces holomorphic functions on $\D$ with Gaussian-integer Taylor
@@ -293,10 +282,10 @@ Lemma~\ref{lem:affine} says that the coefficient map
 \]
 is \emph{triangular with surjective affine diagonal}: the first $n+1$
 entries $(m = 0,\ldots,n)$ are independent of $c$, and the entry at
-$m = n+1$ is an affine surjection onto $\C$.  The modified factors thus
-act as elementary jet-correction operators: each $E_n(z/a;\,c)$ corrects
-one new Taylor coefficient without disturbing any previously corrected
-one.  The resulting induction resembles Borel-type interpolation or
+$m = n+1$ is an affine surjection onto $\C$.  In this sense each $E_n(z/a;\,c)$ operates as a one-coefficient
+corrector: it fixes one new Taylor coefficient without disturbing any
+previously corrected one.  The resulting induction resembles Borel-type
+interpolation or
 triangular normal-form constructions in formal algebra, here carried
 out in a convergent analytic product.
 \end{remark}
@@ -408,7 +397,7 @@ $(r/\abs{a_{n+1}})^{n+1}$ down to $r^{n+1}$, independently of whether
 $\abs{a_{n+1}} \lessgtr 1$.  The second uses $r/\abs{a_{n+1}} \leq r/s$
 to sum the geometric tail; note that for zeros inside $\D$ one has
 $\abs{a_{n+1}} < 1$, so $r/\abs{a_{n+1}} > r$ and the cruder bound
-$r^{n+2}/(1-r)$ is \emph{not} available --- the comparison must be made
+$r^{n+2}/(1-r)$ is \emph{not} available; the comparison must be made
 against $s \leq \abs{a_{n+1}}$.  In particular
 $\abs{G_n} = O\bigl((r/s)^{n}\bigr)$ uniformly on $\abs{z} \leq r$, so
 $\sum_{n \geq N_0} \sup_{\abs{z}\leq r} \abs{G_n} < \infty$.  For
@@ -530,7 +519,7 @@ Theorem~\ref{prop:Zi} to realize $D$ by some $g \in \mR$, then form
 $f(z) = g(z)\,\overline{g(\bar z)}$.  The function $\overline{g(\bar z)}$
 has Taylor coefficients $\overline{b_n}$ (conjugates of those of $g$),
 and the product has coefficients $\sum_k b_k \overline{b_{n-k}} \in \R$
-when $D$ is conjugation-stable --- but these are not generally integers.
+when $D$ is conjugation-stable, but these are not generally integers.
 The direct slot-factor argument avoids this issue by maintaining real
 integer coefficients throughout the induction, without passing through a
 $\Zi$-coefficient intermediate.
@@ -581,8 +570,8 @@ coefficient and nontrivial rounding was required.
 
 Let $\mR = \Zi[[z]] \cap \OD$ and $\mRR = \Z[[z]] \cap \OD$, and write
 $\mathfrak{n}_0 = \{g \in \mR : g(0) = 0\}$ for the augmentation ideal.
-We are unaware of results concerning whether $\mR$ is coherent, integrally
-closed, or B\'ezout; we derive only what follows from the main results.
+We derive only what follows directly from the main results, leaving the
+deeper algebraic structure of $\mR$ for Section~\ref{sec:open}.
 
 We first record that the units of $\mR$ are completely determined: a
 nowhere-vanishing element with admissible constant term is automatically
@@ -725,9 +714,9 @@ $\phi(\mathfrak{m}) = \mathfrak{n}_0$, not any strictly larger ideal.
 Propositions~\ref{prop:inject} and~\ref{prop:fiber} together say that
 $\mathrm{MaxSpec}(\OD)$ embeds injectively into $\mathrm{Spec}(\mR)$,
 with image disjoint from the primes strictly above $\mathfrak{n}_0$.
-Those primes --- the maximal ideals of $\mR/\mathfrak{n}_0 \cong \Zi$,
-i.e., the principal ideals $(1+i)$, $(2+i)$, $(3)$, $(2+3i)$, \ldots
---- are arithmetic data present in $\mathrm{Spec}(\mR)$ but absent from
+Those primes (the maximal ideals of $\mR/\mathfrak{n}_0 \cong \Zi$,
+i.e., the principal ideals $(1+i)$, $(2+i)$, $(3)$, $(2+3i)$, \ldots)
+are arithmetic data present in $\mathrm{Spec}(\mR)$ but absent from
 $\mathrm{MaxSpec}(\OD)$.
 
 The analogous statements hold for $\mRR$ with $\Z$ in place of $\Zi$.
@@ -747,9 +736,9 @@ $p \equiv 3 \pmod{4}$ remains inert, and $p=2$ ramifies.
   $f \mapsto (f(0),\, f/f(0))$ splits $\mR^\times$ as
   $\Zi^\times \times U_1$, where $U_1 = \{f \in \mR^\times : f(0) = 1\}$
   is the group of nowhere-vanishing $\Zi$-series normalized at the
-  origin.  Describing $U_1$ intrinsically --- for instance whether
+  origin.  Describing $U_1$ intrinsically (for instance, whether
   $\log f$ admits a useful normal form, or how $U_1$ sits inside the
-  multiplicative group of nowhere-vanishing elements of $\OD$ --- remains
+  multiplicative group of nowhere-vanishing elements of $\OD$) remains
   open.
 
 \item \textbf{Surjectivity of $\phi$.}  Whether every maximal ideal of
