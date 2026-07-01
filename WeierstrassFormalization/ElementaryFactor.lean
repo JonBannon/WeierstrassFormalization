@@ -103,6 +103,89 @@ theorem E_zero (n : ℕ) (c : ℂ) : E n c 0 = 1 := by
     simp [zero_pow (Nat.one_le_iff_ne_zero.mp hk.1)]
   simp [hsum]
 
+/-- The exponent appearing in the definition of `E`, as a standalone function. -/
+private noncomputable def auxQ (n : ℕ) (c w : ℂ) : ℂ :=
+  (∑ k ∈ Finset.Icc 1 n, w ^ k / k) + c * w ^ (n + 1) / (n + 1)
+
+/-- `log (1 - w) + auxQ n c w`: agrees with `E n c` after taking `exp`, away from `w = 1`. -/
+private noncomputable def auxK (n : ℕ) (c w : ℂ) : ℂ :=
+  Complex.log (1 - w) + auxQ n c w
+
+private lemma E_eq_exp_auxK {n : ℕ} {c w : ℂ} (hw1 : w ≠ 1) :
+    E n c w = Complex.exp (auxK n c w) := by
+  have h1w : (1 : ℂ) - w = Complex.exp (Complex.log (1 - w)) :=
+    (Complex.exp_log (sub_ne_zero.mpr hw1.symm)).symm
+  unfold E auxK auxQ
+  conv_lhs => rw [h1w]
+  rw [← Complex.exp_add]
+
+private lemma analyticAt_auxQ (n : ℕ) (c w : ℂ) : AnalyticAt ℂ (auxQ n c) w := by
+  unfold auxQ
+  fun_prop
+
+private lemma analyticAt_auxK {n : ℕ} {c w : ℂ} (hw : (1 : ℂ) - w ∈ Complex.slitPlane) :
+    AnalyticAt ℂ (auxK n c) w := by
+  have hlog : AnalyticAt ℂ (fun z : ℂ => Complex.log (1 - z)) w :=
+    AnalyticAt.clog (by fun_prop) hw
+  exact hlog.add (analyticAt_auxQ n c w)
+
+private lemma auxK_zero (n : ℕ) (c : ℂ) : auxK n c 0 = 0 := by
+  unfold auxK auxQ
+  have hsum : ∑ k ∈ Finset.Icc 1 n, (0 : ℂ) ^ k / k = 0 := by
+    refine Finset.sum_eq_zero (fun k hk => ?_)
+    rw [Finset.mem_Icc] at hk
+    simp [zero_pow (Nat.one_le_iff_ne_zero.mp hk.1)]
+  simp [hsum]
+
+private lemma iteratedDeriv_auxQ {n : ℕ} (c : ℂ) {k : ℕ} (hk1 : 1 ≤ k) (hkn : k ≤ n) :
+    iteratedDeriv k (auxQ n c) 0 = (Nat.factorial (k - 1) : ℂ) := by
+  have h1 : iteratedDeriv k (fun w : ℂ => ∑ j ∈ Finset.Icc 1 n, w ^ j / j) 0
+      = ∑ j ∈ Finset.Icc 1 n, iteratedDeriv k (fun w : ℂ => w ^ j / j) 0 :=
+    iteratedDeriv_fun_sum (fun j _ => by fun_prop)
+  have h2 : ∀ j : ℕ, iteratedDeriv k (fun w : ℂ => w ^ j / j) 0
+      = if k = j then (Nat.factorial (k - 1) : ℂ) else 0 := by
+    intro j
+    rw [iteratedDeriv_div_const, iteratedDeriv_fun_pow_zero]
+    split_ifs with h
+    · subst h
+      have hk0 : (k : ℂ) ≠ 0 := by exact_mod_cast (by omega : k ≠ 0)
+      rw [eq_comm, eq_div_iff hk0, ← Nat.cast_mul,
+        mul_comm (Nat.factorial (k - 1)) k, Nat.mul_factorial_pred (by omega : k ≠ 0)]
+    · simp
+  have h3 : iteratedDeriv k (fun w : ℂ => c * w ^ (n + 1) / (n + 1)) 0 = 0 := by
+    rw [iteratedDeriv_div_const, iteratedDeriv_const_mul_field, iteratedDeriv_fun_pow_zero,
+      if_neg (by omega)]
+    simp
+  have h4 : iteratedDeriv k (auxQ n c) 0
+      = iteratedDeriv k (fun w : ℂ => ∑ j ∈ Finset.Icc 1 n, w ^ j / j) 0
+        + iteratedDeriv k (fun w : ℂ => c * w ^ (n + 1) / (n + 1)) 0 := by
+    unfold auxQ
+    exact iteratedDeriv_fun_add (by fun_prop) (by fun_prop)
+  rw [h4, h3, add_zero, h1]
+  rw [Finset.sum_eq_single k]
+  · rw [h2]; simp
+  · intro j _ hjk
+    rw [h2]; simp [Ne.symm hjk]
+  · intro hk_notmem
+    exact absurd (Finset.mem_Icc.mpr ⟨hk1, hkn⟩) hk_notmem
+
+private lemma iteratedDeriv_log_one_sub {k : ℕ} (hk1 : 1 ≤ k) :
+    iteratedDeriv k (fun w : ℂ => Complex.log (1 - w)) 0 = -(Nat.factorial (k - 1) : ℂ) := by
+  obtain ⟨j, rfl⟩ := Nat.exists_eq_succ_of_ne_zero (by omega : k ≠ 0)
+  have h1 := congrFun (iteratedDeriv_comp_const_sub (𝕜 := ℂ) (F := ℂ) (j + 1) Complex.log (1 : ℂ)) 0
+  simp only [sub_zero] at h1
+  have h2 : iteratedDeriv (j + 1) Complex.log (1 : ℂ) = (-1 : ℂ) ^ j * (Nat.factorial j : ℂ) := by
+    rw [iteratedDeriv_succ_log Complex.one_mem_slitPlane]
+    simp
+  rw [h1, h2, smul_eq_mul]
+  simp only [Nat.succ_sub_one]
+  have hpow : (-1 : ℂ) ^ (j + 1) * (-1 : ℂ) ^ j = -1 := by
+    rw [← pow_add, show j + 1 + j = 2 * j + 1 by ring, pow_succ, pow_mul]
+    norm_num
+  calc (-1 : ℂ) ^ (j + 1) * ((-1 : ℂ) ^ j * (Nat.factorial j : ℂ))
+      = ((-1 : ℂ) ^ (j + 1) * (-1 : ℂ) ^ j) * (Nat.factorial j : ℂ) := by ring
+    _ = -(Nat.factorial j : ℂ) := by rw [hpow]; ring
+
 /-- **Lemma `lem:structure` (ii).** The Taylor coefficients of degree
 `1, …, n` of `E_n(·;c)` vanish, independently of `c`. -/
 theorem taylorCoeff_E_eq_zero {n : ℕ} {c : ℂ} {m : ℕ} (hm1 : 1 ≤ m) (hmn : m ≤ n) :
