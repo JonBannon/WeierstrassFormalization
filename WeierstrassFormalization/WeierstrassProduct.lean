@@ -161,6 +161,30 @@ listed (each point repeated according to its multiplicity) into a finite list; c
 these lists over `m`, in order, gives an enumeration of `D.support \ {0}` with the escape
 property (paper's "such an enumeration exists ... because `S` is discrete"). If this
 enumeration is finite (or empty), continue it with the constant sequence `a k := 2`. -/
+private theorem support_countable (D : EffectiveDivisor) : (D.support \ {0}).Countable := by
+  have hsub : D.support \ {0} ⊆ ⋃ m : ℕ, D.support ∩ Metric.closedBall 0 (1 - 1 / (m + 2)) := by
+    intro z hz
+    have hzS : z ∈ D.support := hz.1
+    have hz𝔻 : z ∈ 𝔻 := by
+      by_contra h; exact hzS (D.mult_eq_zero_of_not_mem_𝔻 z h)
+    have hzn1 : ‖z‖ < 1 := mem_𝔻_iff.mp hz𝔻
+    have h1mz : (0:ℝ) < 1 - ‖z‖ := by linarith
+    obtain ⟨m, hm⟩ := exists_nat_gt (1 / (1 - ‖z‖))
+    rw [div_lt_iff₀ h1mz] at hm
+    refine Set.mem_iUnion.mpr ⟨m, hzS, ?_⟩
+    rw [Metric.mem_closedBall, dist_zero_right]
+    have h2 : (0:ℝ) < (m:ℝ) + 2 := by positivity
+    rw [show (1:ℝ) - 1 / ((m:ℝ) + 2) = ((m:ℝ) + 2 - 1) / ((m:ℝ) + 2) by field_simp]
+    rw [le_div_iff₀ h2]
+    nlinarith [hm]
+  refine Set.Countable.mono hsub (Set.countable_iUnion fun m => Set.Finite.countable ?_)
+  rw [Set.inter_comm]
+  refine D.finite_inter_compact _ (fun z hz => ?_) (isCompact_closedBall 0 _)
+  rw [Metric.mem_closedBall, dist_zero_right] at hz
+  refine mem_𝔻_iff.mpr (lt_of_le_of_lt hz ?_)
+  have : (0:ℝ) < 1 / ((m:ℝ) + 2) := by positivity
+  linarith
+
 theorem exists_enum_of_effectiveDivisor (D : EffectiveDivisor) :
     ∃ a : ℕ → ℂ, (∀ k, a k ≠ 0) ∧
       (∀ z ≠ 0, D.mult z = {k | a k = z}.ncard) ∧
