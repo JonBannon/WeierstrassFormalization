@@ -193,32 +193,35 @@ theorem exists_enum_of_effectiveDivisor (D : EffectiveDivisor) :
   set S : Set ℂ := D.support \ {0} with hS_def
   have hScount : S.Countable := support_countable D
   haveI : Countable ↥S := hScount.to_subtype
-  -- the "labeled zeros with multiplicity": `Σtype` has one element `⟨z, i⟩` for each `z ∈ S`
+  -- the "labeled zeros with multiplicity": `ZigmaT` has one element `⟨z, i⟩` for each `z ∈ S`
   -- and each `i < D.mult z`.
-  let Σtype := Σ z : ↥S, Fin (D.mult z)
-  haveI : Countable Σtype := inferInstance
-  -- an injective `ι : Σtype → ℕ` (bijective if `Σtype` is infinite; otherwise just injective,
-  -- with finite range, which is enough).
-  obtain ⟨ι, hιinj⟩ : ∃ ι : Σtype → ℕ, Function.Injective ι := by
-    by_cases hfin : Finite Σtype
-    · exact ⟨Fin.val ∘ Finite.equivFin Σtype,
-        Fin.val_injective.comp (Finite.equivFin Σtype).injective⟩
-    · haveI : Infinite Σtype := not_finite_iff_infinite.mp hfin
-      haveI : Encodable Σtype := Encodable.ofCountable Σtype
-      haveI : Denumerable Σtype := Denumerable.ofEncodableOfInfinite Σtype
-      exact ⟨Denumerable.eqv Σtype, (Denumerable.eqv Σtype).injective⟩
-  set a : ℕ → ℂ := fun k => if h : ∃ σ : Σtype, ι σ = k then ((Classical.choose h).1 : ℂ)
+  let ZigmaT := Σ z : ↥S, Fin (D.mult z)
+  haveI : Countable ZigmaT := inferInstance
+  -- an injective `ι : ZigmaT → ℕ`, surjective if `ZigmaT` is infinite (so that there is no
+  -- "padding" in that case; otherwise `ι` just has finite range, which is enough).
+  obtain ⟨ι, hιinj, hιsurj⟩ : ∃ ι : ZigmaT → ℕ, Function.Injective ι ∧
+      (Infinite ZigmaT → Function.Surjective ι) := by
+    by_cases hfin : Finite ZigmaT
+    · exact ⟨Fin.val ∘ Finite.equivFin ZigmaT,
+        Fin.val_injective.comp (Finite.equivFin ZigmaT).injective,
+        fun hinf => (hinf.not_finite hfin).elim⟩
+    · haveI : Infinite ZigmaT := not_finite_iff_infinite.mp hfin
+      haveI : Encodable ZigmaT := Encodable.ofCountable ZigmaT
+      haveI : Denumerable ZigmaT := Denumerable.ofEncodableOfInfinite ZigmaT
+      exact ⟨Denumerable.eqv ZigmaT, (Denumerable.eqv ZigmaT).injective,
+        fun _ => (Denumerable.eqv ZigmaT).surjective⟩
+  set a : ℕ → ℂ := fun k => if h : ∃ σ : ZigmaT, ι σ = k then ((Classical.choose h).1 : ℂ)
     else 2 with ha_def
-  have ha_of_ex {k : ℕ} (h : ∃ σ : Σtype, ι σ = k) : a k = ((Classical.choose h).1 : ℂ) := by
+  have ha_of_ex {k : ℕ} (h : ∃ σ : ZigmaT, ι σ = k) : a k = ((Classical.choose h).1 : ℂ) := by
     simp only [ha_def, dif_pos h]
-  have ha_of_not_ex {k : ℕ} (h : ¬ ∃ σ : Σtype, ι σ = k) : a k = 2 := by
+  have ha_of_not_ex {k : ℕ} (h : ¬ ∃ σ : ZigmaT, ι σ = k) : a k = 2 := by
     simp only [ha_def, dif_neg h]
-  have haS : ∀ k (h : ∃ σ : Σtype, ι σ = k), a k ∈ S := by
+  have haS : ∀ k (h : ∃ σ : ZigmaT, ι σ = k), a k ∈ S := by
     intro k h; rw [ha_of_ex h]; exact (Classical.choose h).1.2
   refine ⟨a, ?_, ?_, ?_⟩
   · -- `a k ≠ 0`
     intro k
-    by_cases h : ∃ σ : Σtype, ι σ = k
+    by_cases h : ∃ σ : ZigmaT, ι σ = k
     · exact (haS k h).2
     · rw [ha_of_not_ex h]; norm_num
   · -- multiplicity
@@ -233,27 +236,39 @@ theorem exists_enum_of_effectiveDivisor (D : EffectiveDivisor) :
         exact mem_𝔻_iff.mp this
       have hz0ne2 : z0 ≠ 2 := by
         intro h; rw [h] at hz0lt1; norm_num at hz0lt1
-      have hset : {k | a k = z0} = Set.range (fun i : Fin (D.mult zS) => ι ⟨zS, i⟩) := by
+      have hset : {k | a k = z0}
+          = Set.range (ι ∘ fun i : Fin (D.mult zS) => (⟨zS, i⟩ : ZigmaT)) := by
         ext k
         simp only [Set.mem_setOf_eq, Set.mem_range]
         constructor
         · intro hak
-          have hex : ∃ σ : Σtype, ι σ = k := by
+          have hex : ∃ σ : ZigmaT, ι σ = k := by
             by_contra hne
             rw [ha_of_not_ex hne] at hak
             exact hz0ne2 hak.symm
           rw [ha_of_ex hex] at hak
-          obtain ⟨z₁, i₁⟩ := Classical.choose hex
+          generalize hσeq : Classical.choose hex = σ₀ at hak
+          obtain ⟨z₁, i₁⟩ := σ₀
           have hz1 : z₁ = zS := Subtype.ext hak
           subst hz1
-          exact ⟨i₁, Classical.choose_spec hex⟩
+          refine ⟨i₁, ?_⟩
+          simp only [Function.comp_apply]
+          rw [← hσeq]
+          exact Classical.choose_spec hex
         · rintro ⟨i, hi⟩
-          have hex : ∃ σ : Σtype, ι σ = k := ⟨⟨zS, i⟩, hi⟩
+          simp only [Function.comp_apply] at hi
+          have hex : ∃ σ : ZigmaT, ι σ = k := ⟨⟨zS, i⟩, hi⟩
           rw [ha_of_ex hex]
-          have : Classical.choose hex = (⟨zS, i⟩ : Σtype) := hιinj (Classical.choose_spec hex |>.trans hi.symm)
+          have : Classical.choose hex = (⟨zS, i⟩ : ZigmaT) :=
+            hιinj (Classical.choose_spec hex |>.trans hi.symm)
           rw [this]
-      rw [hset, Set.ncard_range_of_injective _ (hιinj.comp (fun a b hab => by
-        simpa using congrArg Sigma.fst hab))]
+      have hmk_inj : Function.Injective (fun i : Fin (D.mult zS) => (⟨zS, i⟩ : ZigmaT)) :=
+        fun i1 i2 h => by
+          have := sigma_mk_injective (α := ↥S) (β := fun z => Fin (D.mult z)) (i := zS) h
+          exact this
+      rw [hset, Set.ncard_range_of_injective (hιinj.comp hmk_inj)]
+      change D.mult z0 = Nat.card (Fin (D.mult zS))
+      rw [hzS_def]
       simp [Nat.card_eq_fintype_card]
     · -- `z0` is not a zero of `D`.
       have hmult0 : D.mult z0 = 0 := by
@@ -262,7 +277,7 @@ theorem exists_enum_of_effectiveDivisor (D : EffectiveDivisor) :
       rw [hmult0]
       by_cases hz2 : z0 = 2
       · subst hz2
-        have hcompl : {k | a k = 2} = {k | ¬ ∃ σ : Σtype, ι σ = k} := by
+        have hcompl : {k | a k = 2} = {k | ¬ ∃ σ : ZigmaT, ι σ = k} := by
           ext k
           simp only [Set.mem_setOf_eq]
           constructor
@@ -272,34 +287,37 @@ theorem exists_enum_of_effectiveDivisor (D : EffectiveDivisor) :
               have := (Classical.choose hex).1.2
               by_contra hnot
               exact this.1 (D.mult_eq_zero_of_not_mem_𝔻 _ hnot)
-            rw [← hak] at this
+            rw [hak] at this
             have := mem_𝔻_iff.mp this
             norm_num at this
           · intro hne; exact ha_of_not_ex hne
         rw [hcompl]
-        by_cases hfin : Finite Σtype
+        by_cases hfin : Finite ZigmaT
         · symm
           apply Set.Infinite.ncard
           have hrange_fin : (Set.range ι).Finite := Set.finite_range ι
-          have : {k | ¬ ∃ σ : Σtype, ι σ = k} = (Set.range ι)ᶜ := by
+          have : {k | ¬ ∃ σ : ZigmaT, ι σ = k} = (Set.range ι)ᶜ := by
             ext k; simp [Set.mem_range]
           rw [this]
           exact hrange_fin.infinite_compl
-        · exfalso
-          haveI : Infinite Σtype := not_finite_iff_infinite.mp hfin
-          haveI : Encodable Σtype := Encodable.ofCountable Σtype
-          haveI : Denumerable Σtype := Denumerable.ofEncodableOfInfinite Σtype
-          sorry
+        · haveI : Infinite ZigmaT := not_finite_iff_infinite.mp hfin
+          have hsurj : Function.Surjective ι := hιsurj this
+          have : {k | ¬ ∃ σ : ZigmaT, ι σ = k} = ∅ := by
+            ext k
+            simp only [Set.mem_setOf_eq, Set.mem_empty_iff_false, iff_false, not_not]
+            exact hsurj k
+          rw [this, Set.ncard_empty]
       · symm
-        rw [Set.ncard_eq_zero_iff_eq_empty]
-        · ext k
+        have : {k | a k = z0} = ∅ := by
+          ext k
           simp only [Set.mem_setOf_eq, Set.mem_empty_iff_false, iff_false]
           intro hak
-          by_cases hex : ∃ σ : Σtype, ι σ = k
+          by_cases hex : ∃ σ : ZigmaT, ι σ = k
           · rw [ha_of_ex hex] at hak
             exact hzS (hak ▸ (Classical.choose hex).1.2)
           · rw [ha_of_not_ex hex] at hak
             exact hz2 hak.symm
+        rw [this, Set.ncard_empty]
   · -- escape property
     intro s hs
     sorry
