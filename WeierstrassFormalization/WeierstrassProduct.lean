@@ -189,7 +189,120 @@ theorem exists_enum_of_effectiveDivisor (D : EffectiveDivisor) :
     ∃ a : ℕ → ℂ, (∀ k, a k ≠ 0) ∧
       (∀ z ≠ 0, D.mult z = {k | a k = z}.ncard) ∧
       ∀ s : ℝ, s < 1 → {k | ‖a k‖ < s}.Finite := by
-  sorry
+  classical
+  set S : Set ℂ := D.support \ {0} with hS_def
+  have hScount : S.Countable := support_countable D
+  haveI : Countable ↥S := hScount.to_subtype
+  -- the "labeled zeros with multiplicity": `Σtype` has one element `⟨z, i⟩` for each `z ∈ S`
+  -- and each `i < D.mult z`.
+  let Σtype := Σ z : ↥S, Fin (D.mult z)
+  haveI : Countable Σtype := inferInstance
+  -- an injective `ι : Σtype → ℕ` (bijective if `Σtype` is infinite; otherwise just injective,
+  -- with finite range, which is enough).
+  obtain ⟨ι, hιinj⟩ : ∃ ι : Σtype → ℕ, Function.Injective ι := by
+    by_cases hfin : Finite Σtype
+    · exact ⟨Fin.val ∘ Finite.equivFin Σtype,
+        Fin.val_injective.comp (Finite.equivFin Σtype).injective⟩
+    · haveI : Infinite Σtype := not_finite_iff_infinite.mp hfin
+      haveI : Encodable Σtype := Encodable.ofCountable Σtype
+      haveI : Denumerable Σtype := Denumerable.ofEncodableOfInfinite Σtype
+      exact ⟨Denumerable.eqv Σtype, (Denumerable.eqv Σtype).injective⟩
+  set a : ℕ → ℂ := fun k => if h : ∃ σ : Σtype, ι σ = k then ((Classical.choose h).1 : ℂ)
+    else 2 with ha_def
+  have ha_of_ex {k : ℕ} (h : ∃ σ : Σtype, ι σ = k) : a k = ((Classical.choose h).1 : ℂ) := by
+    simp only [ha_def, dif_pos h]
+  have ha_of_not_ex {k : ℕ} (h : ¬ ∃ σ : Σtype, ι σ = k) : a k = 2 := by
+    simp only [ha_def, dif_neg h]
+  have haS : ∀ k (h : ∃ σ : Σtype, ι σ = k), a k ∈ S := by
+    intro k h; rw [ha_of_ex h]; exact (Classical.choose h).1.2
+  refine ⟨a, ?_, ?_, ?_⟩
+  · -- `a k ≠ 0`
+    intro k
+    by_cases h : ∃ σ : Σtype, ι σ = k
+    · exact (haS k h).2
+    · rw [ha_of_not_ex h]; norm_num
+  · -- multiplicity
+    intro z0 hz0
+    by_cases hzS : z0 ∈ S
+    · -- `z0` is genuinely a zero of `D`.
+      set zS : ↥S := ⟨z0, hzS⟩ with hzS_def
+      have hz0lt1 : ‖z0‖ < 1 := by
+        have : z0 ∈ 𝔻 := by
+          by_contra h
+          exact hzS.1 (D.mult_eq_zero_of_not_mem_𝔻 z0 h) |>.elim
+        exact mem_𝔻_iff.mp this
+      have hz0ne2 : z0 ≠ 2 := by
+        intro h; rw [h] at hz0lt1; norm_num at hz0lt1
+      have hset : {k | a k = z0} = Set.range (fun i : Fin (D.mult zS) => ι ⟨zS, i⟩) := by
+        ext k
+        simp only [Set.mem_setOf_eq, Set.mem_range]
+        constructor
+        · intro hak
+          have hex : ∃ σ : Σtype, ι σ = k := by
+            by_contra hne
+            rw [ha_of_not_ex hne] at hak
+            exact hz0ne2 hak.symm
+          rw [ha_of_ex hex] at hak
+          obtain ⟨z₁, i₁⟩ := Classical.choose hex
+          have hz1 : z₁ = zS := Subtype.ext hak
+          subst hz1
+          exact ⟨i₁, Classical.choose_spec hex⟩
+        · rintro ⟨i, hi⟩
+          have hex : ∃ σ : Σtype, ι σ = k := ⟨⟨zS, i⟩, hi⟩
+          rw [ha_of_ex hex]
+          have : Classical.choose hex = (⟨zS, i⟩ : Σtype) := hιinj (Classical.choose_spec hex |>.trans hi.symm)
+          rw [this]
+      rw [hset, Set.ncard_range_of_injective _ (hιinj.comp (fun a b hab => by
+        simpa using congrArg Sigma.fst hab))]
+      simp [Nat.card_eq_fintype_card]
+    · -- `z0` is not a zero of `D`.
+      have hmult0 : D.mult z0 = 0 := by
+        by_contra h
+        exact hzS ⟨h, hz0⟩
+      rw [hmult0]
+      by_cases hz2 : z0 = 2
+      · subst hz2
+        have hcompl : {k | a k = 2} = {k | ¬ ∃ σ : Σtype, ι σ = k} := by
+          ext k
+          simp only [Set.mem_setOf_eq]
+          constructor
+          · intro hak hex
+            rw [ha_of_ex hex] at hak
+            have : (Classical.choose hex).1.1 ∈ 𝔻 := by
+              have := (Classical.choose hex).1.2
+              by_contra hnot
+              exact this.1 (D.mult_eq_zero_of_not_mem_𝔻 _ hnot)
+            rw [← hak] at this
+            have := mem_𝔻_iff.mp this
+            norm_num at this
+          · intro hne; exact ha_of_not_ex hne
+        rw [hcompl]
+        by_cases hfin : Finite Σtype
+        · symm
+          apply Set.Infinite.ncard
+          have hrange_fin : (Set.range ι).Finite := Set.finite_range ι
+          have : {k | ¬ ∃ σ : Σtype, ι σ = k} = (Set.range ι)ᶜ := by
+            ext k; simp [Set.mem_range]
+          rw [this]
+          exact hrange_fin.infinite_compl
+        · exfalso
+          haveI : Infinite Σtype := not_finite_iff_infinite.mp hfin
+          haveI : Encodable Σtype := Encodable.ofCountable Σtype
+          haveI : Denumerable Σtype := Denumerable.ofEncodableOfInfinite Σtype
+          sorry
+      · symm
+        rw [Set.ncard_eq_zero_iff_eq_empty]
+        · ext k
+          simp only [Set.mem_setOf_eq, Set.mem_empty_iff_false, iff_false]
+          intro hak
+          by_cases hex : ∃ σ : Σtype, ι σ = k
+          · rw [ha_of_ex hex] at hak
+            exact hzS (hak ▸ (Classical.choose hex).1.2)
+          · rw [ha_of_not_ex hex] at hak
+            exact hz2 hak.symm
+  · -- escape property
+    intro s hs
+    sorry
 
 /-! ## The partial products and the inductive rounding step -/
 
