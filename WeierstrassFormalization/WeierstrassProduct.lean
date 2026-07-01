@@ -75,7 +75,69 @@ shift/reindexing argument from `E_eq_exp_G`'s proof (`Function.Injective.hasSum_
 `Summable.sum_add_tsum_nat_add`). -/
 theorem norm_G_le (n : ℕ) (c w : ℂ) {ρ : ℝ} (hρ0 : 0 ≤ ρ) (hρ1 : ρ < 1) (hw : ‖w‖ ≤ ρ) :
     ‖G n c w‖ ≤ ‖c - 1‖ / (n + 1) * ρ ^ (n + 1) + ρ ^ (n + 2) / (1 - ρ) := by
-  sorry
+  have hw1 : ‖w‖ < 1 := lt_of_le_of_lt hw hρ1
+  -- the tail sum agrees with a shifted `tsum`, exactly as in `E_eq_exp_G`'s proof
+  set f0 : ℕ → ℂ := fun k => w ^ k / k with hf0_def
+  have hSum0 : HasSum f0 (-Complex.log (1 - w)) := Complex.hasSum_taylorSeries_neg_log hw1
+  have hSummable0 : Summable f0 := hSum0.summable
+  have hginj : Function.Injective (fun i : ℕ => i + (n + 2)) := add_left_injective (n + 2)
+  have hfzero : ∀ x, x ∉ Set.range (fun i : ℕ => i + (n + 2)) →
+      (if x ≥ n + 2 then f0 x else 0) = 0 := by
+    intro x hx
+    rw [if_neg]
+    intro hge
+    exact hx ⟨x - (n + 2), Nat.sub_add_cancel hge⟩
+  have hshiftSummable : Summable (fun i : ℕ => f0 (i + (n + 2))) :=
+    (summable_nat_add_iff (n + 2)).2 hSummable0
+  have hcomp : (fun k : ℕ => if k ≥ n + 2 then f0 k else 0) ∘ (fun i : ℕ => i + (n + 2))
+      = fun i : ℕ => f0 (i + (n + 2)) := by
+    funext i
+    simp only [Function.comp_apply]
+    rw [if_pos (Nat.le_add_left (n + 2) i)]
+  have hTHasSum : HasSum (fun k : ℕ => if k ≥ n + 2 then f0 k else 0) (∑' i, f0 (i + (n + 2))) :=
+    (hginj.hasSum_iff hfzero).mp (hcomp ▸ hshiftSummable.hasSum)
+  have hT_eq : (∑' k : ℕ, if k ≥ n + 2 then f0 k else 0) = ∑' i, f0 (i + (n + 2)) :=
+    hTHasSum.tsum_eq
+  -- bound the tail by a geometric series
+  have hbound_tail : ‖∑' i, f0 (i + (n + 2))‖ ≤ ρ ^ (n + 2) / (1 - ρ) := by
+    have hterm_le : ∀ i, ‖f0 (i + (n + 2))‖ ≤ ρ ^ (n + 2) * ρ ^ i := by
+      intro i
+      have h1 : ‖f0 (i + (n + 2))‖ = ‖w‖ ^ (i + (n + 2)) / ((i + (n + 2) : ℕ) : ℝ) := by
+        change ‖w ^ (i + (n + 2)) / ((i + (n + 2) : ℕ) : ℂ)‖
+            = ‖w‖ ^ (i + (n + 2)) / ((i + (n + 2) : ℕ) : ℝ)
+        rw [norm_div, norm_pow, Complex.norm_natCast]
+      rw [h1]
+      have hge1 : (1 : ℝ) ≤ ((i + (n + 2) : ℕ) : ℝ) := by
+        have : (2 : ℝ) ≤ ((i + (n + 2) : ℕ) : ℝ) := by
+          push_cast; linarith [Nat.cast_nonneg (α := ℝ) i]
+        linarith
+      calc ‖w‖ ^ (i + (n + 2)) / ((i + (n + 2) : ℕ) : ℝ)
+          ≤ ‖w‖ ^ (i + (n + 2)) := div_le_self (by positivity) hge1
+        _ ≤ ρ ^ (i + (n + 2)) := by gcongr
+        _ = ρ ^ (n + 2) * ρ ^ i := by rw [pow_add]; ring
+    have hsummableρ : Summable (fun i : ℕ => ρ ^ (n + 2) * ρ ^ i) :=
+      (summable_geometric_of_lt_one hρ0 hρ1).mul_left _
+    calc ‖∑' i, f0 (i + (n + 2))‖
+        ≤ ∑' i, ‖f0 (i + (n + 2))‖ := norm_tsum_le_tsum_norm (hshiftSummable.norm)
+      _ ≤ ∑' i, ρ ^ (n + 2) * ρ ^ i := (hshiftSummable.norm).tsum_le_tsum hterm_le hsummableρ
+      _ = ρ ^ (n + 2) * ∑' i, ρ ^ i := tsum_mul_left
+      _ = ρ ^ (n + 2) * (1 - ρ)⁻¹ := by rw [tsum_geometric_of_lt_one hρ0 hρ1]
+      _ = ρ ^ (n + 2) / (1 - ρ) := by ring
+  -- bound the affine term
+  have hbound_affine : ‖(c - 1) * w ^ (n + 1) / (n + 1)‖ ≤ ‖c - 1‖ / (n + 1) * ρ ^ (n + 1) := by
+    have hcast : ((n : ℂ) + 1) = ((n + 1 : ℕ) : ℂ) := by push_cast; ring
+    rw [hcast, norm_div, norm_mul, norm_pow, Complex.norm_natCast]
+    push_cast
+    rw [div_mul_eq_mul_div,
+      div_le_div_iff_of_pos_right (by positivity : (0 : ℝ) < (n : ℝ) + 1)]
+    gcongr
+  unfold G
+  calc ‖(c - 1) * w ^ (n + 1) / (n + 1) - ∑' k : ℕ, if k ≥ n + 2 then w ^ k / k else 0‖
+      ≤ ‖(c - 1) * w ^ (n + 1) / (n + 1)‖
+        + ‖∑' k : ℕ, if k ≥ n + 2 then w ^ k / k else 0‖ := norm_sub_le _ _
+    _ ≤ ‖c - 1‖ / (n + 1) * ρ ^ (n + 1) + ρ ^ (n + 2) / (1 - ρ) := by
+        rw [hT_eq]
+        exact add_le_add hbound_affine hbound_tail
 
 /-! ## Divisor enumeration -/
 
