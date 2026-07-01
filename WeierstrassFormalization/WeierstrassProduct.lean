@@ -701,15 +701,18 @@ private theorem tendsto_iteratedDeriv_of_tendstoLocallyUniformlyOn
     (hFdiff : ∀ N, Differentiable ℂ (F N))
     (hconv : TendstoLocallyUniformlyOn F f Filter.atTop U)
     (m : ℕ) {x : ℂ} (hx : x ∈ U) :
-    Filter.Tendsto (fun N => iteratedDeriv m (F N) x) Filter.atTop (nhds (iteratedDeriv m f x)) := by
+    Filter.Tendsto (fun N => iteratedDeriv m (F N) x) Filter.atTop
+      (nhds (iteratedDeriv m f x)) := by
   induction m generalizing F f with
   | zero => simpa using hconv.tendsto_at hx
   | succ m ih =>
       have hderivconv : TendstoLocallyUniformlyOn (deriv ∘ F) (deriv f) Filter.atTop U :=
         hconv.deriv (Filter.Eventually.of_forall fun N => (hFdiff N).differentiableOn) hU
-      have hderivdiff : ∀ N, Differentiable ℂ ((deriv ∘ F) N) := fun N => (hFdiff N).deriv
+      have hderivdiff : ∀ N, Differentiable ℂ ((deriv ∘ F) N) := fun N x =>
+        ((analyticOnNhd_univ_iff_differentiable.mpr (hFdiff N)) x (Set.mem_univ x)).deriv
+          |>.differentiableAt
       simp only [iteratedDeriv_succ']
-      exact ih hderivdiff hderivconv hx
+      exact ih hderivdiff hderivconv
 
 /-! ## The zero divisor of the product -/
 
@@ -748,12 +751,64 @@ Proof sketch: write the infinite product as the `(k+1)`-st partial product times
 value-`1` part holds since every tail factor is `1` at `0` (`E_zero`) and the tail converges
 locally uniformly (by the same `M`-test argument, reindexed), and analyticity follows as in
 `holomorphicOn_tprod_factors`. -/
-theorem taylorCoeff_tprod_factors_eq_partial
+theorem taylorCoeff_tprod_factors_eq_partial (hnmono : StrictMono n)
     (hM : ∀ K ⊆ 𝔻, IsCompact K → ∃ u : ℕ → ℝ, Summable u ∧
       ∀ k, ∀ z ∈ K, ‖E (n k) (c k) (z / a k) - 1‖ ≤ u k)
     (m k : ℕ) (hk : m < n k) :
     taylorCoeff (fun z => ∏' j, E (n j) (c j) (z / a j)) m
       = taylorCoeff (fun z => ∏ j ∈ Finset.range (k + 1), E (n j) (c j) (z / a j)) m := by
-  sorry
+  have h𝔻open : IsOpen 𝔻 := Metric.isOpen_ball
+  have h0 : (0 : ℂ) ∈ 𝔻 := by simp [mem_𝔻_iff]
+  -- the partial products of degree `≥ k+1` agree with the `(k+1)`-st one at degree `m`.
+  have hstable : ∀ K (hK : k + 1 ≤ K),
+      taylorCoeff (fun z => ∏ j ∈ Finset.range K, E (n j) (c j) (z / a j)) m
+        = taylorCoeff (fun z => ∏ j ∈ Finset.range (k + 1), E (n j) (c j) (z / a j)) m := by
+    intro K hK
+    induction K, hK using Nat.le_induction with
+    | base => rfl
+    | succ K hK ih =>
+        have hanalytic : AnalyticAt ℂ
+            (fun z => ∏ j ∈ Finset.range K, E (n j) (c j) (z / a j)) 0 := by
+          have : Differentiable ℂ (fun z => ∏ j ∈ Finset.range K, E (n j) (c j) (z / a j)) := by
+            unfold E; fun_prop
+          exact this.analyticAt 0
+        have hmnK : m ≤ n K := by
+          have hlt : n k < n K := hnmono (by omega)
+          omega
+        have hfun_eq : (fun z => ∏ j ∈ Finset.range (K + 1), E (n j) (c j) (z / a j))
+            = fun z => (∏ j ∈ Finset.range K, E (n j) (c j) (z / a j)) * E (n K) (c K) (z / a K) :=
+          funext fun z => Finset.prod_range_succ _ _
+        rw [hfun_eq, taylorCoeff_mul_E_eq_of_le hanalytic hmnK]
+        exact ih
+  -- the corresponding `iteratedDeriv`s are eventually constant.
+  have hne : (Nat.factorial m : ℂ) ≠ 0 := by exact_mod_cast Nat.factorial_ne_zero m
+  have hstable_iter : ∀ K (hK : k + 1 ≤ K),
+      iteratedDeriv m (fun z => ∏ j ∈ Finset.range K, E (n j) (c j) (z / a j)) 0
+        = iteratedDeriv m (fun z => ∏ j ∈ Finset.range (k + 1), E (n j) (c j) (z / a j)) 0 := by
+    intro K hK
+    have heq := hstable K hK
+    unfold taylorCoeff at heq
+    have heq2 := congrArg (· * (Nat.factorial m : ℂ)) heq
+    simpa [div_mul_cancel₀ _ hne] using heq2
+  -- pass to the limit.
+  have hFdiff : ∀ N,
+      Differentiable ℂ (fun z => ∏ j ∈ Finset.range N, E (n j) (c j) (z / a j)) := by
+    intro N; unfold E; fun_prop
+  have hconv : TendstoLocallyUniformlyOn
+      (fun N z => ∏ j ∈ Finset.range N, E (n j) (c j) (z / a j))
+      (fun z => ∏' j, E (n j) (c j) (z / a j)) Filter.atTop 𝔻 :=
+    (hasProdLocallyUniformlyOn_factors hM).tendstoLocallyUniformlyOn_finsetRange
+  have htendsto := tendsto_iteratedDeriv_of_tendstoLocallyUniformlyOn h𝔻open hFdiff hconv m h0
+  have heventually : (fun K => iteratedDeriv m
+      (fun z => ∏ j ∈ Finset.range K, E (n j) (c j) (z / a j)) 0) =ᶠ[Filter.atTop]
+      (fun _ => iteratedDeriv m
+        (fun z => ∏ j ∈ Finset.range (k + 1), E (n j) (c j) (z / a j)) 0) := by
+    filter_upwards [Filter.eventually_ge_atTop (k + 1)] with K hK using hstable_iter K hK
+  have hlim_eq : iteratedDeriv m (fun z => ∏' j, E (n j) (c j) (z / a j)) 0
+      = iteratedDeriv m
+        (fun z => ∏ j ∈ Finset.range (k + 1), E (n j) (c j) (z / a j)) 0 :=
+    tendsto_nhds_unique htendsto (tendsto_const_nhds.congr' heventually.symm)
+  unfold taylorCoeff
+  rw [hlim_eq]
 
 end Weierstrass
