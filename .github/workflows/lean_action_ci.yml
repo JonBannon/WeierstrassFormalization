@@ -23,9 +23,11 @@ jobs:
       # handled by the steps below, since docgen-action's own blueprint
       # builder unconditionally runs a `pip install pygraphviz` command that
       # breaks against recent pip releases (see
-      # https://github.com/leanprover-community/docgen-action/blob/main/action.yml),
-      # even though this project doesn't use the `dep_graph` feature that
-      # pygraphviz is for.
+      # https://github.com/leanprover-community/docgen-action/blob/main/action.yml).
+      # `pygraphviz` is a mandatory transitive dependency of `leanblueprint`
+      # (via `plastexdepgraph`), so it can't be avoided just by not using the
+      # `dep_graph` feature in web.tex — instead we install it from Alpine's
+      # prebuilt `py3-pygraphviz` package rather than building it via pip.
       - uses: leanprover-community/docgen-action@v1
         with:
           blueprint: false
@@ -37,10 +39,10 @@ jobs:
           docker_image: ghcr.io/xu-cheng/texlive-full:20250401
           run: |
             apk update
-            apk add --update make py3-pip git pkgconfig
+            apk add --update make py3-pip git pkgconfig py3-pygraphviz
             git config --global --add safe.directory $GITHUB_WORKSPACE
             git config --global --add safe.directory `pwd`
-            python3 -m venv env
+            python3 -m venv --system-site-packages env
             source env/bin/activate
             pip install --upgrade pip
             pip install leanblueprint
