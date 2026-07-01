@@ -210,4 +210,193 @@ theorem exists_holomorphic_gaussianInt_coeffs_nowhereVanishing
     have hgval : taylorCoeff g 0 = g 0 := by unfold taylorCoeff; simp
     rw [← hgval, hstep, hval, hprod0]
 
+/-! ## Proposition `prop:units`: the reciprocal-power-series recursion -/
+
+/-- The `0`-th Taylor coefficient of any function is its value at `0`. -/
+theorem taylorCoeff_zero_eq (f : ℂ → ℂ) : taylorCoeff f 0 = f 0 := by
+  unfold taylorCoeff; simp
+
+/-- Auxiliary "history table" for the reciprocal-power-series recursion: `reciprocalSeqAux u r N`
+records the first `N + 1` terms of the sequence, built by ordinary structural recursion on `N`
+(the memoized-history device used elsewhere in this project for recursions depending on more
+than the immediately preceding term, e.g. `auxP`/`auxQ`). -/
+private noncomputable def reciprocalSeqAux {R : Type*} [CommRing R] (u : Rˣ) (r : ℕ → R) :
+    ℕ → ℕ → R
+  | 0, _ => ((u⁻¹ : Rˣ) : R)
+  | (N + 1), k =>
+      if k ≤ N then reciprocalSeqAux u r N k
+      else -((u⁻¹ : Rˣ) : R)
+        * ∑ j ∈ Finset.range (N + 1), r (j + 1) * reciprocalSeqAux u r N (N - j)
+
+/-- The reciprocal-power-series coefficients: the unique sequence `s` with `s 0 = u⁻¹` and
+`s (n+1) = -u⁻¹ · ∑_{k=0}^{n} r (k+1) · s (n-k)`, matching the formal recursion for the
+reciprocal of a power series `∑ r n z ^ n` with unit constant term `u`. -/
+private noncomputable def reciprocalSeq {R : Type*} [CommRing R] (u : Rˣ) (r : ℕ → R) (n : ℕ) :
+    R :=
+  reciprocalSeqAux u r n n
+
+private theorem reciprocalSeqAux_stable {R : Type*} [CommRing R] (u : Rˣ) (r : ℕ → R)
+    (N k : ℕ) (hk : k ≤ N) : reciprocalSeqAux u r (N + 1) k = reciprocalSeqAux u r N k := by
+  simp only [reciprocalSeqAux, if_pos hk]
+
+private theorem reciprocalSeqAux_eq_reciprocalSeq {R : Type*} [CommRing R] (u : Rˣ) (r : ℕ → R) :
+    ∀ N k, k ≤ N → reciprocalSeqAux u r N k = reciprocalSeq u r k := by
+  intro N
+  induction N with
+  | zero =>
+      intro k hk
+      have hk0 : k = 0 := by omega
+      subst hk0; rfl
+  | succ N ih =>
+      intro k hk
+      rcases Nat.lt_or_ge k (N + 1) with hlt | hge
+      · exact (reciprocalSeqAux_stable u r N k (by omega)).trans (ih k (by omega))
+      · have : k = N + 1 := by omega
+        subst this; rfl
+
+private theorem reciprocalSeq_zero {R : Type*} [CommRing R] (u : Rˣ) (r : ℕ → R) :
+    reciprocalSeq u r 0 = ((u⁻¹ : Rˣ) : R) := rfl
+
+private theorem reciprocalSeq_succ {R : Type*} [CommRing R] (u : Rˣ) (r : ℕ → R) (N : ℕ) :
+    reciprocalSeq u r (N + 1)
+      = -((u⁻¹ : Rˣ) : R) * ∑ j ∈ Finset.range (N + 1), r (j + 1) * reciprocalSeq u r (N - j) := by
+  have hunfold : reciprocalSeq u r (N + 1)
+      = -((u⁻¹ : Rˣ) : R)
+        * ∑ j ∈ Finset.range (N + 1), r (j + 1) * reciprocalSeqAux u r N (N - j) := by
+    change reciprocalSeqAux u r (N + 1) (N + 1) = _
+    simp only [reciprocalSeqAux, if_neg (show ¬ N + 1 ≤ N by omega)]
+  rw [hunfold]
+  congr 1
+  refine Finset.sum_congr rfl (fun j hj => ?_)
+  rw [reciprocalSeqAux_eq_reciprocalSeq u r N (N - j) (Nat.sub_le N j)]
+
+/-- **The reciprocal-power-series argument underlying Proposition `prop:units`.** If `f` is
+holomorphic and nowhere-vanishing on `𝔻`, its Taylor coefficients all lie in the image of an
+injective-on-units ring hom `φ : R →+* ℂ` (via a sequence `r`), and `f 0` is the image of a
+*unit* `u` of `R`, then the Taylor coefficients of `1/f` also all lie in the image of `φ`. This
+is the "formal inverse of a unit-constant-term power series stays integral" fact used to show
+that the reciprocal of a unit of `ℛ` (or `ℛ_ℝ`) again lies in `ℛ` (or `ℛ_ℝ`). -/
+theorem hasCoeffsIn_inv {R : Type*} [CommRing R] (φ : R →+* ℂ)
+    {f : ℂ → ℂ} (hf : HolomorphicOn f) (hfnv : ∀ z ∈ 𝔻, f z ≠ 0)
+    (r : ℕ → R) (hr : ∀ n, taylorCoeff f n = φ (r n)) (u : Rˣ) (hu : φ (u : R) = f 0) :
+    ∀ n, taylorCoeff (fun z => (f z)⁻¹) n = φ (reciprocalSeq u r n) := by
+  have hf0ne : f 0 ≠ 0 := hfnv 0 zero_mem_𝔻
+  have hf_at0 : AnalyticAt ℂ f 0 := hf 0 zero_mem_𝔻
+  have hfinv_at0 : AnalyticAt ℂ (fun z => (f z)⁻¹) 0 := hf_at0.inv hf0ne
+  have h𝔻nhds : 𝔻 ∈ nhds (0 : ℂ) := Metric.isOpen_ball.mem_nhds zero_mem_𝔻
+  have hfg_ev : (fun z => f z * (f z)⁻¹) =ᶠ[nhds (0 : ℂ)] (fun _ : ℂ => (1 : ℂ)) := by
+    filter_upwards [h𝔻nhds] with z hz
+    exact mul_inv_cancel₀ (hfnv z hz)
+  intro n
+  induction n using Nat.strong_induction_on with
+  | _ n ih =>
+    have htaylor_eq :
+        taylorCoeff (fun z => f z * (f z)⁻¹) n = taylorCoeff (fun _ : ℂ => (1 : ℂ)) n := by
+      unfold taylorCoeff
+      exact congrArg (· / (Nat.factorial n : ℂ))
+        (eventuallyEq_iteratedDeriv_of_eventuallyEq hfg_ev n).self_of_nhds
+    rw [taylorCoeff_mul hf_at0 hfinv_at0 n, taylorCoeff_const, Finset.sum_range_succ',
+      Nat.sub_zero] at htaylor_eq
+    rw [taylorCoeff_zero_eq f] at htaylor_eq
+    rcases n with _ | m
+    · -- base case `n = 0`
+      simp only [Finset.range_zero, Finset.sum_empty, zero_add] at htaylor_eq
+      norm_num at htaylor_eq
+      rw [reciprocalSeq_zero]
+      have hfu : φ (u : R) * φ ((u⁻¹ : Rˣ) : R) = 1 := by
+        rw [← map_mul, Units.mul_inv, map_one]
+      rw [hu] at hfu
+      exact mul_left_cancel₀ hf0ne (htaylor_eq.trans hfu.symm)
+    · -- inductive step `n = m + 1`
+      have hsub : ∀ i ∈ Finset.range (m + 1), (m + 1) - (i + 1) = m - i := by
+        intro i hi; have : i ≤ m := Nat.lt_succ_iff.mp (Finset.mem_range.mp hi); omega
+      rw [Finset.sum_congr rfl (fun i hi => by rw [hsub i hi])] at htaylor_eq
+      simp only [if_neg (Nat.succ_ne_zero m)] at htaylor_eq
+      have hsum_eq : ∑ i ∈ Finset.range (m + 1), taylorCoeff f (i + 1) * taylorCoeff
+          (fun z => (f z)⁻¹) (m - i) = φ (∑ i ∈ Finset.range (m + 1), r (i + 1)
+            * reciprocalSeq u r (m - i)) := by
+        rw [map_sum]
+        refine Finset.sum_congr rfl (fun i hi => ?_)
+        have him : m - i ≤ m := Nat.sub_le m i
+        rw [map_mul, hr (i + 1), ih (m - i) (by omega)]
+      rw [hsum_eq] at htaylor_eq
+      have hSeq : ∑ i ∈ Finset.range (m + 1), r (i + 1) * reciprocalSeq u r (m - i)
+          = -((u : Rˣ) : R) * reciprocalSeq u r (m + 1) := by
+        rw [reciprocalSeq_succ u r m, ← mul_assoc]
+        have hu2 : -((u : Rˣ) : R) * -((u⁻¹ : Rˣ) : R) = 1 := by
+          rw [neg_mul_neg, Units.mul_inv]
+        rw [hu2, one_mul]
+      rw [hSeq, map_mul, map_neg, hu] at htaylor_eq
+      have : f 0 * taylorCoeff (fun z => (f z)⁻¹) (m + 1)
+          = f 0 * φ (reciprocalSeq u r (m + 1)) := by linear_combination htaylor_eq
+      exact mul_left_cancel₀ hf0ne this
+
+/-! ## Proposition `prop:units`: units of `ℛ` and `ℛ_ℝ` -/
+
+/-- `f` is a unit of `ℛ = ℤ[i][[z]] ∩ 𝒪(𝔻)`: it lies in `ℛ` and has a multiplicative inverse
+that also lies in `ℛ`. -/
+def IsUnitOfGaussianIntRing (f : ℂ → ℂ) : Prop :=
+  HolomorphicOn f ∧ HasGaussianIntCoeffs f ∧
+    ∃ g : ℂ → ℂ, HolomorphicOn g ∧ HasGaussianIntCoeffs g ∧ ∀ z ∈ 𝔻, f z * g z = 1
+
+/-- `f` is a unit of `ℛ_ℝ = ℤ[[z]] ∩ 𝒪(𝔻)`. -/
+def IsUnitOfIntRing (f : ℂ → ℂ) : Prop :=
+  HolomorphicOn f ∧ HasIntCoeffs f ∧
+    ∃ g : ℂ → ℂ, HolomorphicOn g ∧ HasIntCoeffs g ∧ ∀ z ∈ 𝔻, f z * g z = 1
+
+/-- **Proposition `prop:units` (Gaussian-integer half).** An element `f` of `ℛ` is a unit iff
+`f 0 ∈ ℤ[i]ˣ` and `f` is nowhere-vanishing on `𝔻`. -/
+theorem isUnitOfGaussianIntRing_iff {f : ℂ → ℂ} (hf : HolomorphicOn f)
+    (hfi : HasGaussianIntCoeffs f) :
+    IsUnitOfGaussianIntRing f ↔
+      (∃ u : GaussianInt, f 0 = (u : ℂ) ∧ IsUnit u) ∧ (∀ z ∈ 𝔻, f z ≠ 0) := by
+  constructor
+  · rintro ⟨-, -, g, -, hgi, hfg⟩
+    refine ⟨?_, fun z hz hcontra => by
+      have := hfg z hz; rw [hcontra, zero_mul] at this; exact absurd this.symm one_ne_zero⟩
+    obtain ⟨zf, hzf⟩ := hfi 0
+    obtain ⟨zg, hzg⟩ := hgi 0
+    rw [taylorCoeff_zero_eq] at hzf hzg
+    have h01 := hfg 0 zero_mem_𝔻
+    rw [hzf, hzg] at h01
+    have heq : ((zf * zg : GaussianInt) : ℂ) = ((1 : GaussianInt) : ℂ) := by
+      rw [GaussianInt.toComplex_mul, GaussianInt.toComplex_one]; exact h01
+    exact ⟨zf, hzf, IsUnit.of_mul_eq_one zg (GaussianInt.toComplex_inj.mp heq)⟩
+  · rintro ⟨⟨u0, hfu0, u, hu⟩, hfnv⟩
+    have hf0ne : f 0 ≠ 0 := hfnv 0 zero_mem_𝔻
+    have hfi' := hfi
+    choose zr hzr using hfi'
+    have hphiu : GaussianInt.toComplex (u : GaussianInt) = f 0 := by rw [hu, ← hfu0]
+    refine ⟨hf, hfi, fun z => (f z)⁻¹, fun z hz => (hf z hz).inv (hfnv z hz), ?_,
+      fun z hz => mul_inv_cancel₀ (hfnv z hz)⟩
+    intro n
+    exact ⟨reciprocalSeq u zr n, hasCoeffsIn_inv GaussianInt.toComplex hf hfnv zr hzr u hphiu n⟩
+
+/-- **Proposition `prop:units` (integer half).** An element `f` of `ℛ_ℝ` is a unit iff
+`f 0 ∈ ℤˣ = \{\pm 1\}` and `f` is nowhere-vanishing on `𝔻`. -/
+theorem isUnitOfIntRing_iff {f : ℂ → ℂ} (hf : HolomorphicOn f) (hfi : HasIntCoeffs f) :
+    IsUnitOfIntRing f ↔
+      (∃ u : ℤ, f 0 = (u : ℂ) ∧ IsUnit u) ∧ (∀ z ∈ 𝔻, f z ≠ 0) := by
+  constructor
+  · rintro ⟨-, -, g, -, hgi, hfg⟩
+    refine ⟨?_, fun z hz hcontra => by
+      have := hfg z hz; rw [hcontra, zero_mul] at this; exact absurd this.symm one_ne_zero⟩
+    obtain ⟨kf, hkf⟩ := hfi 0
+    obtain ⟨kg, hkg⟩ := hgi 0
+    rw [taylorCoeff_zero_eq] at hkf hkg
+    have h01 := hfg 0 zero_mem_𝔻
+    rw [hkf, hkg] at h01
+    have heq : ((kf * kg : ℤ) : ℂ) = ((1 : ℤ) : ℂ) := by push_cast; exact h01
+    exact ⟨kf, hkf, IsUnit.of_mul_eq_one kg (by exact_mod_cast heq)⟩
+  · rintro ⟨⟨u0, hfu0, u, hu⟩, hfnv⟩
+    have hf0ne : f 0 ≠ 0 := hfnv 0 zero_mem_𝔻
+    have hfi' := hfi
+    choose kr hkr using hfi'
+    have hphiu : ((u : ℤ) : ℂ) = f 0 := by rw [hu, ← hfu0]
+    refine ⟨hf, hfi, fun z => (f z)⁻¹, fun z hz => (hf z hz).inv (hfnv z hz), ?_,
+      fun z hz => mul_inv_cancel₀ (hfnv z hz)⟩
+    intro n
+    exact ⟨reciprocalSeq u kr n,
+      hasCoeffsIn_inv (Int.castRingHom ℂ) hf hfnv kr hkr u hphiu n⟩
+
 end Weierstrass
