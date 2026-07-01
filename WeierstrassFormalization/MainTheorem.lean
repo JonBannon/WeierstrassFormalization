@@ -123,7 +123,93 @@ issue arises (unlike naively rounding a single unpaired nonreal zero's coefficie
 theorem exists_holomorphic_int_coeffs_of_conjInvariant (D : EffectiveDivisor)
     (hD : D.ConjInvariant) :
     ∃ f : ℂ → ℂ, HolomorphicOn f ∧ IsZeroDivisorOf D f ∧ HasIntCoeffs f := by
-  sorry
+  obtain ⟨a, ha0, hamult, hesc, ha_pair⟩ := exists_pairedEnum_of_conjInvariant D hD
+  obtain ⟨c, hcforce, hcbound⟩ := exists_pairCoeffSeq a ha0 ha_pair
+  have hM := exists_Mtest_of_pairCoeffSeq a c ha0 hesc hcbound
+  set n : ℕ → ℕ := fun k => k / 2 with hn_def
+  set g : ℂ → ℂ := fun z => ∏' k, E (n k) (c k) (z / a k) with hg_def
+  set dd : ℕ := D.mult 0 with hdd_def
+  set f : ℂ → ℂ := fun z => z ^ dd * g z with hf_def
+  have hnmono : Monotone n := fun k1 k2 h => by simp only [hn_def]; omega
+  have hg_holo : HolomorphicOn g := holomorphicOn_tprod_factors (n := n) hM
+  have hmono_holo : HolomorphicOn (fun z : ℂ => z ^ dd) := by
+    intro z _
+    have : Differentiable ℂ (fun z : ℂ => z ^ dd) := by fun_prop
+    exact this.analyticAt z
+  have hg_analytic0 : AnalyticAt ℂ g 0 := hg_holo 0 (by simp [mem_𝔻_iff])
+  -- every Taylor coefficient of `g` lies in `ℤ`.
+  have hg_int : ∀ m : ℕ, ∃ k : ℤ, taylorCoeff g m = k := by
+    intro m
+    obtain ⟨km, hkm⟩ := hcforce m
+    refine ⟨km, ?_⟩
+    have hstep1 : taylorCoeff g m = taylorCoeff (pairProduct a c (2 * m + 2 + 1)) m :=
+      taylorCoeff_tprod_factors_eq_partial (n := n) hnmono hM m (2 * m + 2)
+        (show m < n (2 * m + 2) by simp only [hn_def]; omega)
+    have hshrink1 := pairProduct_taylorCoeff_shrink a c (2 * m) m (by omega)
+    have hshrink2 := pairProduct_taylorCoeff_shrink a c (2 * m + 1) m (by omega)
+    have hshrink3 := pairProduct_taylorCoeff_shrink a c (2 * m + 2) m (by omega)
+    rw [hstep1, hshrink3, hshrink2, hshrink1, hkm]
+  refine ⟨f, ?_, ?_, ?_⟩
+  · -- `HolomorphicOn f`
+    intro z hz
+    exact (hmono_holo z hz).mul (hg_holo z hz)
+  · -- `IsZeroDivisorOf D f`
+    intro z hz
+    have hg_analytic : AnalyticAt ℂ g z := hg_holo z hz
+    have hmono_analytic : AnalyticAt ℂ (fun w : ℂ => w ^ dd) z := hmono_holo z hz
+    have hg_order : analyticOrderAt g z = ({k | a k = z}.ncard : ℕ∞) :=
+      analyticOrderAt_tprod_factors_eq_ncard (n := n) ha0 hM z hz
+    have hg_order_ne_top : analyticOrderAt g z ≠ ⊤ := by rw [hg_order]; exact ENat.coe_ne_top _
+    have hf_eq : f = fun w => w ^ dd * g w := hf_def
+    by_cases hz0 : z = 0
+    · subst hz0
+      have hmono_order : analyticOrderAt (fun w : ℂ => w ^ dd) (0 : ℂ) = (dd : ℕ∞) := by
+        have hfun_eq : (fun x : ℂ => x - 0) ^ dd = fun w : ℂ => w ^ dd := by
+          funext x; simp [Pi.pow_apply]
+        rw [← hfun_eq]
+        exact analyticOrderAt_centeredMonomial (𝕜 := ℂ) (z₀ := (0 : ℂ)) (n := dd)
+      have hfiber_empty : {k | a k = (0 : ℂ)}.ncard = 0 := by
+        have hempty : {k | a k = (0 : ℂ)} = ∅ := by
+          ext k
+          simp only [Set.mem_setOf_eq, Set.mem_empty_iff_false, iff_false]
+          exact ha0 k
+        rw [hempty, Set.ncard_empty]
+      have hmono_order_ne_top : analyticOrderAt (fun w : ℂ => w ^ dd) (0 : ℂ) ≠ ⊤ := by
+        rw [hmono_order]; exact ENat.coe_ne_top _
+      have hmul := analyticOrderNatAt_mul hmono_analytic hg_analytic
+        hmono_order_ne_top hg_order_ne_top
+      have hf_eq2 : f = (fun w : ℂ => w ^ dd) * g := hf_eq
+      change D.mult 0 = analyticOrderNatAt f 0
+      rw [hf_eq2, hmul]
+      unfold analyticOrderNatAt
+      rw [hmono_order, hg_order, hfiber_empty]
+      simp [hdd_def]
+    · have hmono_order0 : analyticOrderAt (fun w : ℂ => w ^ dd) z = 0 :=
+        hmono_analytic.analyticOrderAt_eq_zero.mpr (pow_ne_zero dd hz0)
+      have hmono_order0_ne_top : analyticOrderAt (fun w : ℂ => w ^ dd) z ≠ ⊤ := by
+        rw [hmono_order0]; simp
+      have hmul := analyticOrderNatAt_mul hmono_analytic hg_analytic
+        hmono_order0_ne_top hg_order_ne_top
+      have hf_eq2 : f = (fun w : ℂ => w ^ dd) * g := hf_eq
+      change D.mult z = analyticOrderNatAt f z
+      rw [hf_eq2, hmul]
+      unfold analyticOrderNatAt
+      rw [hmono_order0, hg_order, hamult z hz hz0]
+      simp
+  · -- `HasIntCoeffs f`
+    intro m
+    have hshift := taylorCoeff_pow_mul hg_analytic0 dd m
+    by_cases hdm : dd ≤ m
+    · obtain ⟨kg, hkg⟩ := hg_int (m - dd)
+      refine ⟨kg, ?_⟩
+      rw [hf_def]
+      rw [if_pos hdm] at hshift
+      rw [hshift, hkg]
+    · refine ⟨0, ?_⟩
+      rw [hf_def]
+      rw [if_neg hdm] at hshift
+      rw [hshift]
+      simp
 
 /-- **Theorem `thm:main`.** An effective divisor `D` on `𝔻` is the zero
 divisor of a holomorphic function on `𝔻` with Taylor coefficients in `ℤ`

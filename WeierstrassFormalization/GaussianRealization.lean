@@ -23,7 +23,7 @@ def HasGaussianIntCoeffs (f : ℂ → ℂ) : Prop :=
 
 /-- The Taylor coefficients of `z ↦ z ^ d * h z` are those of `h`, shifted by `d`
 (and `0` below degree `d`). -/
-private theorem taylorCoeff_pow_mul {h : ℂ → ℂ} (hh : AnalyticAt ℂ h 0) (d m : ℕ) :
+theorem taylorCoeff_pow_mul {h : ℂ → ℂ} (hh : AnalyticAt ℂ h 0) (d m : ℕ) :
     taylorCoeff (fun z => z ^ d * h z) m = if d ≤ m then taylorCoeff h (m - d) else 0 := by
   have hf : ContDiffAt ℂ (m : ℕ) (fun z : ℂ => z ^ d) 0 := by fun_prop
   have hg : ContDiffAt ℂ (m : ℕ) h 0 := hh.contDiffAt.of_le le_top
