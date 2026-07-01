@@ -383,11 +383,17 @@ theorem taylorCoeff_E_succ (n : ℕ) (c : ℂ) :
 
 /-- **Lemma `lem:structure` (iv).** `E_n(·;c)` is nowhere vanishing on `𝔻`. -/
 theorem E_ne_zero {n : ℕ} {c w : ℂ} (hw : w ∈ 𝔻) : E n c w ≠ 0 := by
-  sorry
+  have hw' : ‖w‖ < 1 := mem_𝔻_iff.mp hw
+  have hw1 : w ≠ 1 := by
+    intro h; rw [h, norm_one] at hw'; exact lt_irrefl 1 hw'
+  unfold E
+  exact mul_ne_zero (sub_ne_zero.mpr (Ne.symm hw1)) (Complex.exp_ne_zero _)
 
 /-- **Lemma `lem:structure` (v).** As an entire function, `E_n(·;c)` has a
 simple zero at `w = 1` and no other zeros. -/
 theorem E_zero_iff {n : ℕ} {c w : ℂ} : E n c w = 0 ↔ w = 1 := by
-  sorry
+  unfold E
+  rw [mul_eq_zero, sub_eq_zero, eq_comm]
+  simp [Complex.exp_ne_zero]
 
 end Weierstrass
