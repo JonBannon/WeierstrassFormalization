@@ -769,8 +769,51 @@ private theorem analyticOrderAt_factor (n : ℕ) (c p z : ℂ) (hp : p ≠ 0) :
       exact AnalyticAt.comp (f := fun w : ℂ => w / p) (x := z) h2 h1
     exact hanalytic.analyticOrderAt_eq_zero.mpr hne
 
+/-- The order of vanishing of a finite partial product at `z` is the number of factors
+vanishing there. -/
+private theorem analyticOrderAt_partialProduct_eq (a c : ℕ → ℂ) (n : ℕ → ℕ)
+    (ha0 : ∀ k, a k ≠ 0) (z : ℂ) (K : ℕ) :
+    analyticOrderAt (fun w => ∏ j ∈ Finset.range K, E (n j) (c j) (w / a j)) z
+      = (((Finset.range K).filter (fun k => a k = z)).card : ℕ∞) := by
+  induction K with
+  | zero =>
+      have heq : (fun w : ℂ => ∏ j ∈ Finset.range 0, E (n j) (c j) (w / a j))
+          = fun _ : ℂ => (1 : ℂ) := by funext w; simp
+      rw [heq]
+      have hconst : AnalyticAt ℂ (fun _ : ℂ => (1 : ℂ)) z := analyticAt_const
+      simp [hconst.analyticOrderAt_eq_zero.mpr (by norm_num : (1 : ℂ) ≠ 0)]
+  | succ K ih =>
+      have heq : (fun w : ℂ => ∏ j ∈ Finset.range (K + 1), E (n j) (c j) (w / a j))
+          = fun w => (∏ j ∈ Finset.range K, E (n j) (c j) (w / a j))
+            * E (n K) (c K) (w / a K) :=
+        funext fun w => Finset.prod_range_succ _ _
+      rw [heq]
+      have hK_analytic : AnalyticAt ℂ
+          (fun w => ∏ j ∈ Finset.range K, E (n j) (c j) (w / a j)) z := by
+        have : Differentiable ℂ (fun w => ∏ j ∈ Finset.range K, E (n j) (c j) (w / a j)) := by
+          unfold E; fun_prop
+        exact this.analyticAt z
+      have hfactor_analytic : AnalyticAt ℂ (fun w => E (n K) (c K) (w / a K)) z := by
+        unfold E; fun_prop
+      have hmul := analyticOrderAt_mul hK_analytic hfactor_analytic
+      rw [ih, analyticOrderAt_factor (n K) (c K) (a K) z (ha0 K)] at hmul
+      have hcard : (((Finset.range (K + 1)).filter (fun k => a k = z)).card : ℕ∞)
+          = (((Finset.range K).filter (fun k => a k = z)).card : ℕ∞)
+            + (if z = a K then 1 else 0) := by
+        rw [Finset.range_add_one, Finset.filter_insert]
+        by_cases hcond : a K = z
+        · rw [if_pos hcond, if_pos hcond.symm,
+            Finset.card_insert_of_notMem (by simp)]
+          push_cast; ring
+        · rw [if_neg hcond, if_neg (Ne.symm hcond)]
+          simp
+      exact hmul.trans hcard.symm
+
 /-! ## The zero divisor of the product -/
 
+set_option maxHeartbeats 1000000 in
+-- the head/tail split and `analyticOrderAt` bookkeeping in this proof involve enough nested
+-- `Multipliable`/`HasProd` typeclass search that the default heartbeat limit is too tight.
 /-- **Zero-divisor identification** (Section 3, proof of `prop:Zi`, Step 4).
 At every point `z ∈ 𝔻`, the order of vanishing of the infinite product equals the sum of the
 orders of vanishing of the (finitely many, by local finiteness of the enumeration) factors
@@ -786,11 +829,105 @@ escape property with `s` slightly above `‖z‖`). The initial finite product h
 same `M`-test and `tprod_one_add_ne_zero_of_summable`-style non-vanishing criterion used in
 `holomorphicOn_tprod_factors`, is holomorphic and non-vanishing near `z`, contributing order
 `0`. -/
-theorem isZeroDivisorOf_tprod_factors
+theorem isZeroDivisorOf_tprod_factors (ha0 : ∀ k, a k ≠ 0)
     (hM : ∀ K ⊆ 𝔻, IsCompact K → ∃ u : ℕ → ℝ, Summable u ∧
       ∀ k, ∀ z ∈ K, ‖E (n k) (c k) (z / a k) - 1‖ ≤ u k) (z : ℂ) (hz : z ∈ 𝔻) :
     analyticOrderNatAt (fun w => ∏' k, E (n k) (c k) (w / a k)) z = {k | a k = z}.ncard := by
-  sorry
+  classical
+  have h𝔻open : IsOpen 𝔻 := Metric.isOpen_ball
+  -- an `M`-test bound at the single point `z`, giving a bound `N` beyond which no factor
+  -- vanishes at `z`.
+  obtain ⟨u, hu_sum, hu_bound⟩ := hM {z} (Set.singleton_subset_iff.mpr hz) isCompact_singleton
+  have hu_bound' : ∀ k, ‖E (n k) (c k) (z / a k) - 1‖ ≤ u k := fun k => hu_bound k z rfl
+  have hu_nonneg : ∀ k, 0 ≤ u k := fun k => (norm_nonneg _).trans (hu_bound' k)
+  have hu0 : Filter.Tendsto u Filter.atTop (nhds 0) := hu_sum.tendsto_atTop_zero
+  obtain ⟨N, hN⟩ := Metric.tendsto_atTop.mp hu0 1 (by norm_num)
+  have hsub : {k | a k = z} ⊆ {k | k < N} := by
+    intro k hk
+    simp only [Set.mem_setOf_eq] at hk
+    by_contra hknot
+    simp only [Set.mem_setOf_eq, not_lt] at hknot
+    have h1 : E (n k) (c k) (z / a k) = 0 := by
+      rw [E_zero_iff, div_eq_one_iff_eq (ha0 k)]; exact hk.symm
+    have h2 : ‖E (n k) (c k) (z / a k) - 1‖ = 1 := by rw [h1]; norm_num
+    have h3 : (1 : ℝ) ≤ u k := h2 ▸ hu_bound' k
+    have h4 := hN k hknot
+    rw [Real.dist_eq, sub_zero, abs_of_nonneg (hu_nonneg k)] at h4
+    linarith
+  -- an `M`-test bound for the shifted sequence.
+  have hM_shift : ∀ K ⊆ 𝔻, IsCompact K → ∃ u : ℕ → ℝ, Summable u ∧
+      ∀ i, ∀ w ∈ K, ‖E (n (i + N)) (c (i + N)) (w / a (i + N)) - 1‖ ≤ u i := by
+    intro K hK hKcpt
+    obtain ⟨uK, huK_sum, huK_bound⟩ := hM K hK hKcpt
+    exact ⟨fun i => uK (i + N), (summable_nat_add_iff N).2 huK_sum,
+      fun i w hw => huK_bound (i + N) w hw⟩
+  -- the head/tail split of the infinite product on `𝔻`.
+  have hsplit : ∀ w ∈ 𝔻, (∏ j ∈ Finset.range N, E (n j) (c j) (w / a j))
+      * (∏' i, E (n (i + N)) (c (i + N)) (w / a (i + N))) = ∏' k, E (n k) (c k) (w / a k) := by
+    intro w hw
+    have hmul : Multipliable (fun k => E (n k) (c k) (w / a k)) :=
+      ((hasProdLocallyUniformlyOn_factors hM).hasProd hw).multipliable
+    have hshift_prod : HasProd (fun i => E (n (i + N)) (c (i + N)) (w / a (i + N)))
+        (∏' i, E (n (i + N)) (c (i + N)) (w / a (i + N))) :=
+      (hasProdLocallyUniformlyOn_factors hM_shift).hasProd hw
+    have hfull_prod : HasProd (fun k => E (n k) (c k) (w / a k))
+        ((∏ j ∈ Finset.range N, E (n j) (c j) (w / a j))
+          * ∏' i, E (n (i + N)) (c (i + N)) (w / a (i + N))) :=
+      hshift_prod.prod_range_mul
+    exact hfull_prod.unique hmul.hasProd
+  have heq_nhds : (fun w => (∏ j ∈ Finset.range N, E (n j) (c j) (w / a j))
+      * ∏' i, E (n (i + N)) (c (i + N)) (w / a (i + N)))
+      =ᶠ[nhds z] (fun w => ∏' k, E (n k) (c k) (w / a k)) := by
+    filter_upwards [h𝔻open.mem_nhds hz] with w hw using hsplit w hw
+  have horder_eq := analyticOrderAt_congr heq_nhds
+  -- the tail is holomorphic and non-vanishing at `z`.
+  have htail_analytic : AnalyticAt ℂ
+      (fun w => ∏' i, E (n (i + N)) (c (i + N)) (w / a (i + N))) z :=
+    holomorphicOn_tprod_factors (n := fun i => n (i + N)) (c := fun i => c (i + N))
+      (a := fun i => a (i + N)) hM_shift z hz
+  obtain ⟨u', hu'_sum, hu'_bound⟩ :=
+    hM_shift {z} (Set.singleton_subset_iff.mpr hz) isCompact_singleton
+  have hu'_bound' : ∀ i, ‖E (n (i + N)) (c (i + N)) (z / a (i + N)) - 1‖ ≤ u' i :=
+    fun i => hu'_bound i z rfl
+  have htail_ne : (∏' i, E (n (i + N)) (c (i + N)) (z / a (i + N))) ≠ 0 := by
+    have hne1 : ∀ i, (1 : ℂ) + (E (n (i + N)) (c (i + N)) (z / a (i + N)) - 1) ≠ 0 := by
+      intro i
+      have : (1 : ℂ) + (E (n (i + N)) (c (i + N)) (z / a (i + N)) - 1)
+          = E (n (i + N)) (c (i + N)) (z / a (i + N)) := by ring
+      rw [this, Ne, E_zero_iff, div_eq_one_iff_eq (ha0 (i + N))]
+      intro hcontra
+      exact absurd (hsub hcontra.symm) (by simp)
+    have hsummable : Summable (fun i => ‖E (n (i + N)) (c (i + N)) (z / a (i + N)) - 1‖) :=
+      Summable.of_nonneg_of_le (fun i => norm_nonneg _) hu'_bound' hu'_sum
+    have hne_prod := tprod_one_add_ne_zero_of_summable hne1 hsummable
+    have hfun_eq : (fun i => (1 : ℂ) + (E (n (i + N)) (c (i + N)) (z / a (i + N)) - 1))
+        = fun i => E (n (i + N)) (c (i + N)) (z / a (i + N)) := by
+      funext i; ring
+    rwa [hfun_eq] at hne_prod
+  have htail_order : analyticOrderAt
+      (fun w => ∏' i, E (n (i + N)) (c (i + N)) (w / a (i + N))) z = 0 :=
+    htail_analytic.analyticOrderAt_eq_zero.mpr htail_ne
+  have hpartial_analytic : AnalyticAt ℂ
+      (fun w => ∏ j ∈ Finset.range N, E (n j) (c j) (w / a j)) z := by
+    have : Differentiable ℂ (fun w => ∏ j ∈ Finset.range N, E (n j) (c j) (w / a j)) := by
+      unfold E; fun_prop
+    exact this.analyticAt z
+  have hmul_order := analyticOrderAt_mul hpartial_analytic htail_analytic
+  rw [htail_order, add_zero] at hmul_order
+  have horder_final : analyticOrderAt (fun w => ∏' k, E (n k) (c k) (w / a k)) z
+      = analyticOrderAt (fun w => ∏ j ∈ Finset.range N, E (n j) (c j) (w / a j)) z :=
+    horder_eq.symm.trans hmul_order
+  have hcard_eq : (((Finset.range N).filter (fun k => a k = z)).card : ℕ)
+      = {k | a k = z}.ncard := by
+    have hset_eq : {k | a k = z} = ↑((Finset.range N).filter (fun k => a k = z)) := by
+      ext k
+      simp only [Set.mem_setOf_eq, Finset.coe_filter, Finset.mem_range, Set.mem_setOf_eq]
+      exact ⟨fun h => ⟨hsub h, h⟩, fun h => h.2⟩
+    rw [hset_eq, Set.ncard_coe_finset]
+  unfold analyticOrderNatAt
+  rw [horder_final, analyticOrderAt_partialProduct_eq a c n ha0 z N]
+  rw [← hcard_eq]
+  simp
 
 /-! ## Passing Taylor coefficients to the limit -/
 
