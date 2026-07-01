@@ -1,0 +1,668 @@
+\chapter{Introduction}
+
+This blueprint documents a Lean~4 / Mathlib formalization of
+\emph{Integer Coefficients Power Series with Prescribed Zero Sets} by
+Jon Bannon and David Feldman. The paper proves that a discrete effective
+divisor on the open unit disk $\D$ is the zero divisor of a holomorphic
+function on $\D$ with integer Taylor coefficients if and only if it is
+invariant under complex conjugation (Theorem~\ref{thm:main}), via an
+intermediate result realizing every effective divisor with Gaussian-integer
+coefficients (Theorem~\ref{thm:propZi}).
+
+The construction in both theorems deforms the classical Weierstrass
+elementary factor by a free parameter, so that each modified factor of
+order $n$ leaves all Taylor coefficients of degree $\le n$ unchanged while
+shifting the coefficient of degree $n+1$ by a controlled affine amount.
+This \emph{triangular} structure lets the coefficients of an infinite
+product be rounded to integers one at a time, without disturbing
+previously-fixed coefficients or breaking convergence.
+
+\bigskip
+\noindent\textbf{Scope.} This blueprint covers the paper's
+Sections~1--3 (the modified elementary factors, the affine-control lemma,
+and the proofs of Theorems~\ref{thm:propZi} and~\ref{thm:main}). The
+paper's remaining sections (the worked numerical example of
+Section~4, and the ring-theoretic consequences of Section~5 — the
+characterization of units, the ideal-theoretic corollaries, and the
+comparison of $\mathrm{Spec}$ and $\mathrm{MaxSpec}$) are \emph{not}
+formalized here.
+
+\bigskip
+\noindent\textbf{How to read this blueprint.} Every definition and
+theorem below is annotated with the Lean declaration(s) that formalize it
+(via a \lean{} link) and a green checkmark once fully proved
+(\leanok). The dependency graph (linked from the web version's
+navigation) shows how each result builds on the others. All results in
+this blueprint are fully proved in Lean, with no \texttt{sorry} and no
+axioms beyond Mathlib's standard three (\texttt{propext},
+\texttt{Classical.choice}, \texttt{Quot.sound}).
+
+\chapter{Preliminaries}
+
+\begin{definition}[The open unit disk]
+  \label{def:disk}
+  \lean{Weierstrass.𝔻}
+  \leanok
+  $\D = \{z \in \C : \abs{z} < 1\}$.
+\end{definition}
+
+\begin{definition}[Holomorphic on $\D$]
+  \label{def:holomorphicOn}
+  \uses{def:disk}
+  \lean{Weierstrass.HolomorphicOn}
+  \leanok
+  A function $f : \C \to \C$ is \emph{holomorphic on $\D$} if it is
+  complex-analytic at every point of $\D$.
+\end{definition}
+
+\begin{definition}[Taylor coefficient]
+  \label{def:taylorCoeff}
+  \lean{Weierstrass.taylorCoeff}
+  \leanok
+  The $n$-th Taylor coefficient of $f$ at the origin is
+  $[z^n]f := f^{(n)}(0)/n!$.
+\end{definition}
+
+\begin{definition}[Effective divisor]
+  \label{def:divisor}
+  \uses{def:disk}
+  \lean{Weierstrass.EffectiveDivisor}
+  \leanok
+  An \emph{effective divisor} on $\D$ is a locally finite formal sum
+  $D = \sum_{a \in S} m_a [a]$ with non-negative integer multiplicities
+  over a discrete subset $S \subset \D$. Formally, $D$ is represented by
+  its multiplicity function $\mathrm{mult} : \C \to \N$, vanishing outside
+  $\D$, such that every compact $K \subseteq \D$ meets
+  $\{z : \mathrm{mult}(z) \ne 0\}$ in only finitely many points (the
+  standard characterization of a discrete, locally finite subset of the
+  open set $\D$).
+\end{definition}
+
+\begin{definition}[Conjugation invariance]
+  \label{def:conjInvariant}
+  \uses{def:divisor}
+  \lean{Weierstrass.EffectiveDivisor.ConjInvariant}
+  \leanok
+  An effective divisor $D$ is \emph{invariant under complex conjugation}
+  if $m_{\bar a} = m_a$ for all $a$.
+\end{definition}
+
+\begin{definition}[Zero divisor of a function]
+  \label{def:zeroDivisorOf}
+  \uses{def:disk, def:divisor}
+  \lean{Weierstrass.IsZeroDivisorOf}
+  \leanok
+  $D$ is \emph{the zero divisor} of $f$ if, for every $z \in \D$, the
+  multiplicity $m_z$ equals the order of vanishing of $f$ at $z$.
+\end{definition}
+
+\chapter{Modified Elementary Factors}
+\label{chap:factors}
+
+\begin{definition}[Modified elementary factor]
+  \label{def:E}
+  \lean{Weierstrass.E}
+  \leanok
+  For $n \ge 0$ and $c \in \C$, the modified elementary factor of order
+  $n$ with parameter $c$ is
+  \[
+    E_n(w;\,c) = (1-w)\exp\Bigl(\sum_{k=1}^{n}\frac{w^k}{k} +
+      \frac{c\,w^{n+1}}{n+1}\Bigr).
+  \]
+  For $c = 1$ this is the classical Weierstrass elementary factor.
+\end{definition}
+
+\begin{definition}[The exponent $G_n$]
+  \label{def:G}
+  \lean{Weierstrass.G}
+  \leanok
+  \[
+    G_n(w;\,c) = \frac{(c-1)\,w^{n+1}}{n+1} - \sum_{k=n+2}^{\infty}\frac{w^k}{k}.
+  \]
+\end{definition}
+
+\begin{lemma}[$E_n = \exp(G_n)$ on $\D$]
+  \label{lem:Eexp}
+  \uses{def:disk, def:E, def:G}
+  \lean{Weierstrass.E_eq_exp_G}
+  \leanok
+  For $w \in \D$, $E_n(w;\,c) = \exp(G_n(w;\,c))$.
+\end{lemma}
+\begin{proof}
+  \uses{lem:Eexp}
+  \leanok
+  Since $-\log(1-w) = \sum_{k \ge 1} w^k/k$ for $w \in \D$, the exponent
+  in the definition of $E_n$ equals $-\log(1-w)$ plus the affine
+  correction term and minus the tail $\sum_{k \ge n+2} w^k/k$; regrouping
+  and exponentiating cancels the $(1-w)^{-1}$ factor against $(1-w)$.
+\end{proof}
+
+\begin{lemma}[Structure of the modified factor]
+  \label{lem:structure}
+  \uses{def:disk, def:E, def:G, lem:Eexp}
+  \lean{Weierstrass.E_zero, Weierstrass.taylorCoeff_E_eq_zero, Weierstrass.taylorCoeff_E_succ, Weierstrass.E_ne_zero, Weierstrass.E_zero_iff}
+  \leanok
+  For all $n \ge 0$, $c \in \C$, and $w \in \D$:
+  \begin{enumerate}
+    \item[(i)] $E_n(0;\,c) = 1$.
+    \item[(ii)] $[w^m]\,E_n(\,\cdot\,;\,c) = 0$ for $1 \le m \le n$,
+      independently of $c$.
+    \item[(iii)] $[w^{n+1}]\,E_n(\,\cdot\,;\,c) = (c-1)/(n+1)$, affine in
+      $c$ with slope $1/(n+1)$.
+    \item[(iv)] $E_n(w;\,c) \ne 0$ for all $w \in \D$.
+    \item[(v)] As an entire function of $w \in \C$, $E_n(\,\cdot\,;\,c)$
+      has a simple zero at $w = 1$ and no other zeros.
+  \end{enumerate}
+\end{lemma}
+\begin{proof}
+  \uses{lem:structure}
+  \leanok
+  (i) is immediate from the definition. (ii)--(iii) follow from the power
+  series expansion $G_n(w;\,c) = \tfrac{c-1}{n+1}w^{n+1} + O(w^{n+2})$
+  together with Lemma~\ref{lem:Eexp}: composing with $\exp$ leaves
+  degrees $\le n$ untouched and reads off the degree-$(n+1)$ coefficient.
+  (iv) is immediate since $\exp$ is nowhere zero. (v) follows directly
+  from the factorization $E_n(w;\,c) = (1-w)e^{H(w)}$ with $H$ entire, so
+  the only zero is that of $(1-w)$; the order (simplicity) of this zero
+  is established separately at Lemma~\ref{lem:zeroSet}, via
+  \lean{Weierstrass.analyticOrderAt_E_div_self}.
+\end{proof}
+
+\chapter{Affine Coefficient Control}
+\label{chap:affine}
+
+\begin{lemma}[Affine coefficient control]
+  \label{lem:affine}
+  \uses{def:E, def:taylorCoeff}
+  \lean{Weierstrass.taylorCoeff_mul_E_eq_of_le, Weierstrass.taylorCoeff_mul_E_succ}
+  \leanok
+  Let $a \in \C \setminus \{0\}$, $n \ge 0$, and $h$ a power series
+  convergent near $0$ with $h_0 = 1$. For $F(z) = h(z)\cdot
+  E_n(z/a;\,c)$:
+  \begin{enumerate}
+    \item[(i)] $[z^m]\,F = h_m$ exactly, for $0 \le m \le n$,
+      independently of $c$.
+    \item[(ii)] $[z^{n+1}]\,F = h_{n+1} + \dfrac{c-1}{(n+1)a^{n+1}}$,
+      affine in $c$ with nonzero slope $1/((n+1)a^{n+1})$.
+  \end{enumerate}
+\end{lemma}
+\begin{proof}
+  \uses{lem:affine}
+  \leanok
+  Write $E_n(z/a;\,c) = \sum_j e_j z^j$; by Lemma~\ref{lem:structure},
+  $e_0 = 1$, $e_1 = \dots = e_n = 0$, and
+  $e_{n+1} = (c-1)/((n+1)a^{n+1})$. Then $[z^m]F = \sum_{j=0}^m
+  h_{m-j}e_j$, and the vanishing of $e_1, \dots, e_n$ isolates the $j=0$
+  term for $m \le n$, or the $j=0$ and $j=n+1$ terms for $m=n+1$.
+\end{proof}
+
+\begin{lemma}[Triangular-affine structure]
+  \label{rem:triangular}
+  \uses{lem:affine}
+  \lean{Weierstrass.exists_c_taylorCoeff_mul_E_succ_eq}
+  \leanok
+  In the setting of Lemma~\ref{lem:affine}, the map $c \mapsto
+  [z^{n+1}](h\cdot E_n(z/a;\,c))$ is a surjective affine map $\C \to \C$;
+  in particular every target value is attained by some $c$.
+\end{lemma}
+\begin{proof}
+  \uses{rem:triangular}
+  \leanok
+  Immediate from Lemma~\ref{lem:affine}(ii): the map is affine with
+  nonzero slope $1/((n+1)a^{n+1})$, hence bijective.
+\end{proof}
+
+\chapter{Gaussian-Integer Realization}
+\label{chap:propZi}
+
+\begin{definition}[Gaussian-integer Taylor coefficients]
+  \label{def:hasGaussianIntCoeffs}
+  \uses{def:taylorCoeff}
+  \lean{Weierstrass.HasGaussianIntCoeffs}
+  \leanok
+  $f$ \emph{has Taylor coefficients in $\Zi$} if $[z^n]f \in \Zi$ for
+  every $n \ge 0$.
+\end{definition}
+
+\begin{theorem}[Gaussian-integer realization]
+  \label{thm:propZi}
+  \uses{def:disk, def:holomorphicOn, def:divisor, def:zeroDivisorOf,
+    def:hasGaussianIntCoeffs}
+  \lean{Weierstrass.exists_holomorphic_gaussianInt_coeffs_of_effectiveDivisor}
+  \leanok
+  Every effective divisor on $\D$ is the zero divisor of a holomorphic
+  function on $\D$ with Taylor coefficients in $\Zi$.
+\end{theorem}
+
+The proof enumerates the divisor's support with multiplicity, then
+inductively rounds the Taylor coefficients of the partial products to
+the nearest Gaussian integer, using the triangular structure of
+Lemma~\ref{lem:affine} so that rounding a new coefficient never disturbs
+an earlier one. The origin is handled separately by an explicit monomial
+factor $z^{m_0}$, so the construction proper enumerates only the support
+away from $0$.
+
+\begin{lemma}[Nearest Gaussian integer]
+  \label{lem:nearestGaussianInt}
+  \lean{Weierstrass.nearestGaussianInt, Weierstrass.norm_sub_nearestGaussianInt_le}
+  \leanok
+  Rounding the real and imaginary parts of $v \in \C$ independently to
+  the nearest integer gives a Gaussian integer $T$ with
+  $\abs{T - v} \le \sqrt2/2$.
+\end{lemma}
+\begin{proof}
+  \uses{lem:nearestGaussianInt}
+  \leanok
+  Each coordinate's rounding error is at most $1/2$; combine via
+  $\abs{\cdot} \le \sqrt2 \max(\abs{\cdot_{\mathrm{re}}},
+  \abs{\cdot_{\mathrm{im}}})$.
+\end{proof}
+
+\begin{lemma}[Bound on the exponent $G_n$]
+  \label{lem:normG}
+  \uses{def:G}
+  \lean{Weierstrass.norm_G_le}
+  \leanok
+  For $\norm{w} \le \rho < 1$,
+  \[
+    \norm{G_n(w;\,c)} \le \frac{\norm{c-1}}{n+1}\,\rho^{n+1}
+      + \frac{\rho^{n+2}}{1-\rho}.
+  \]
+\end{lemma}
+\begin{proof}
+  \uses{lem:normG}
+  \leanok
+  Bound the affine term by the triangle inequality, and the geometric
+  tail $\sum_{k \ge n+2} w^k/k$ termwise by $\norm{w}^k \le \rho^k$,
+  summing the resulting geometric series.
+\end{proof}
+
+\begin{lemma}[Divisor enumeration]
+  \label{lem:enum}
+  \uses{def:disk, def:divisor}
+  \lean{Weierstrass.exists_enum_of_effectiveDivisor}
+  \leanok
+  The support of an effective divisor $D$, away from the origin, can be
+  enumerated as a sequence $a : \N \to \C$ realizing the multiplicity
+  function by counting repeats, with $a_k \ne 0$ for all $k$ and
+  $\norm{a_k} \to 1$ (any fixed $s<1$ bounds $\norm{a_k}$ away from $s$
+  for all but finitely many $k$).
+\end{lemma}
+\begin{proof}
+  \uses{lem:enum}
+  \leanok
+  $\D \setminus \{0\}$ is exhausted by compact annuli; on each, local
+  finiteness of the divisor's support gives a finite list of points with
+  multiplicity, and concatenating these lists over the annuli gives the
+  required enumeration. (If the support is finite or empty, the
+  enumeration is padded by a fixed point outside $\overline\D$, which
+  contributes no zero in $\D$; this uniformly subsumes the paper's
+  separate treatment of the finite-support case.)
+\end{proof}
+
+\begin{lemma}[Inductive coefficient forcing]
+  \label{lem:coeffSeq}
+  \uses{lem:affine, rem:triangular, lem:nearestGaussianInt, lem:enum}
+  \lean{Weierstrass.exists_coeffSeq}
+  \leanok
+  Given $a : \N \to \C$ with $a_k \ne 0$, there is a sequence of
+  correction constants $c : \N \to \C$ such that, writing $P_N :=
+  \prod_{k<N} E_k(z/a_k;\,c_k)$:
+  \begin{itemize}
+    \item every Taylor coefficient of $P_N$ at degree $N$ lies in $\Zi$;
+    \item the rounding error is controlled:
+      $\norm{c_k - 1} \le (\sqrt2/2)(k+1)\norm{a_k}^{k+1}$.
+  \end{itemize}
+\end{lemma}
+\begin{proof}
+  \uses{lem:coeffSeq}
+  \leanok
+  Induction on $N$, using Remark~\ref{rem:triangular} to force
+  $[z^{N+1}]P_{N+1}$ to the Gaussian integer nearest its pre-forced
+  value (Lemma~\ref{lem:nearestGaussianInt}); Lemma~\ref{lem:affine}(i)
+  guarantees that later factors never disturb an already-forced
+  coefficient. Built in Lean by a structural recursion computing the
+  partial product and the next correction constant simultaneously.
+\end{proof}
+
+\begin{lemma}[Weierstrass $M$-test for the product]
+  \label{lem:Mtest}
+  \uses{def:disk, lem:normG, lem:coeffSeq, lem:enum}
+  \lean{Weierstrass.exists_Mtest_of_coeffSeq}
+  \leanok
+  Given the quantitative bound on $c$ from Lemma~\ref{lem:coeffSeq} and
+  the escape property from Lemma~\ref{lem:enum}, the factors
+  $E_k(z/a_k;\,c_k)$ satisfy a Weierstrass $M$-test on every compact
+  $K \subseteq \D$: there is a summable bound $u_k$, uniform in $z \in K$.
+\end{lemma}
+\begin{proof}
+  \uses{lem:Mtest}
+  \leanok
+  Fix $K \subseteq \D$ compact, contained in $\{\norm z \le r\}$ for some
+  $r<1$, and $s$ with $r < s < 1$. Beyond finitely many $k$,
+  $\norm{a_k} \ge s$, so $\norm{z/a_k} \le r/s < 1$ and
+  Lemma~\ref{lem:normG} applies with $\rho := r/s$; the quantitative
+  bound on $c_k$ makes the affine term collapse to
+  $(\sqrt2/2)r^{k+1}$ (the $\norm{a_k}^{k+1}$ factors cancel exactly),
+  and both resulting geometric series are summable. Converting the
+  $G$-bound to a bound on $\norm{E_k - 1}$ uses
+  $\norm{e^x - 1} \le 2\norm x$ for $\norm x \le 1$. The finitely many
+  exceptional small $k$ are absorbed into the bound without affecting
+  summability.
+\end{proof}
+
+\begin{lemma}[Holomorphy of the infinite product]
+  \label{lem:holomorphicProduct}
+  \uses{def:disk, def:holomorphicOn, lem:Mtest}
+  \lean{Weierstrass.hasProdLocallyUniformlyOn_factors, Weierstrass.holomorphicOn_tprod_factors}
+  \leanok
+  Under an $M$-test bound as in Lemma~\ref{lem:Mtest} (stated for a
+  general order function $n : \N \to \N$ and points/parameters
+  $a, c : \N \to \C$), the partial products of
+  $E_{n(k)}(z/a_k;\,c_k)$ converge locally uniformly on $\D$, and the
+  limit is holomorphic on $\D$.
+\end{lemma}
+\begin{proof}
+  \uses{lem:holomorphicProduct}
+  \leanok
+  Standard consequence of the Weierstrass $M$-test for products
+  (\cite[Ch.~5, Thm.~1.1]{Conway}): locally uniform convergence of
+  holomorphic partial products has a holomorphic limit.
+\end{proof}
+
+\begin{lemma}[Freezing of coefficients]
+  \label{lem:taylorStabilize}
+  \uses{lem:affine, lem:holomorphicProduct}
+  \lean{Weierstrass.taylorCoeff_tprod_factors_eq_partial}
+  \leanok
+  For a monotone order function $n : \N \to \N$, once $n(k) > m$ the
+  $m$-th Taylor coefficient of the infinite product
+  $\prod'_j E_{n(j)}(z/a_j;\,c_j)$ agrees with that of the
+  $(k+1)$-st partial product.
+\end{lemma}
+\begin{proof}
+  \uses{lem:taylorStabilize}
+  \leanok
+  Lemma~\ref{lem:affine}(i) shows the finite partial products stabilize
+  at degree $m$ once their length exceeds $k$; passing to the locally
+  uniform limit, iterated derivatives (hence Taylor coefficients) pass
+  to the limit along the same stabilized sequence.
+\end{proof}
+
+\begin{lemma}[Zero-divisor identification]
+  \label{lem:zeroSet}
+  \uses{lem:structure, lem:holomorphicProduct, lem:Mtest}
+  \lean{Weierstrass.analyticOrderAt_tprod_factors_eq_ncard, Weierstrass.isZeroDivisorOf_tprod_factors, Weierstrass.analyticOrderAt_E_div_self}
+  \leanok
+  At every point $z \in \D$, the order of vanishing of the infinite
+  product $\prod'_k E_{n(k)}(z/a_k;\,c_k)$ equals $\abs{\{k : a_k = z\}}$
+  (counted with multiplicity, i.e.\ as a cardinality of a fiber).
+\end{lemma}
+\begin{proof}
+  \uses{lem:zeroSet}
+  \leanok
+  By Lemma~\ref{lem:structure}(v), $E_n(\,\cdot/a;\,c)$ has a simple zero
+  exactly at $a$; additivity of the order of vanishing under finite
+  products gives the order of a partial product as the number of
+  vanishing factors. Splitting the infinite product at an index beyond
+  which no factor vanishes at $z$, the tail is holomorphic and
+  non-vanishing near $z$ (by the same $M$-test criterion used for
+  Lemma~\ref{lem:holomorphicProduct}), so it contributes order $0$.
+\end{proof}
+
+\begin{proof}[Proof of Theorem~\ref{thm:propZi}]
+  \uses{thm:propZi, lem:enum, lem:coeffSeq, lem:Mtest,
+    lem:holomorphicProduct, lem:taylorStabilize, lem:zeroSet}
+  \leanok
+  Factor out the origin: writing $D = m_0[0] + D'$, it suffices to
+  realize $D'$ (supported away from $0$) by $g \in \OD$ with
+  $\Zi$-coefficients and $g(0) \ne 0$, and set $f(z) = z^{m_0}g(z)$.
+  Enumerate $D'$'s support via Lemma~\ref{lem:enum}, force the Taylor
+  coefficients of the partial products into $\Zi$ via
+  Lemma~\ref{lem:coeffSeq} (taking the order function $n = \mathrm{id}$,
+  i.e.\ one factor per index, densely), and pass to the infinite
+  product $g := \prod'_k E_k(z/a_k;\,c_k)$. Holomorphy is
+  Lemma~\ref{lem:holomorphicProduct}; every Taylor coefficient of $g$
+  lies in $\Zi$ by Lemma~\ref{lem:taylorStabilize} (each degree $m$
+  stabilizes, by the $m+1$-st stage, to the value forced in
+  Lemma~\ref{lem:coeffSeq}); and $g$'s zero divisor is $D'$ by
+  Lemma~\ref{lem:zeroSet} together with the multiplicity guarantee of
+  Lemma~\ref{lem:enum}.
+\end{proof}
+
+\chapter{The Main Theorem}
+\label{chap:main}
+
+\begin{definition}[Integer Taylor coefficients]
+  \label{def:hasIntCoeffs}
+  \uses{def:taylorCoeff}
+  \lean{Weierstrass.HasIntCoeffs}
+  \leanok
+  $f$ \emph{has Taylor coefficients in $\Z$} if $[z^n]f \in \Z$ for
+  every $n \ge 0$.
+\end{definition}
+
+\begin{theorem}[Main theorem]
+  \label{thm:main}
+  \uses{def:disk, def:holomorphicOn, def:divisor, def:zeroDivisorOf,
+    def:conjInvariant, def:hasIntCoeffs}
+  \lean{Weierstrass.exists_holomorphic_int_coeffs_iff_conjInvariant}
+  \leanok
+  An effective divisor $D$ on $\D$ is the zero divisor of a holomorphic
+  function on $\D$ with Taylor coefficients in $\Z$ if and only if $D$
+  is invariant under complex conjugation.
+\end{theorem}
+
+\section{Necessity}
+
+\begin{lemma}[Double conjugation is holomorphic]
+  \label{lem:conjComp}
+  \lean{Weierstrass.hasDerivAt_conj_comp_conj, Weierstrass.analyticAt_conj_comp_conj}
+  \leanok
+  If $f$ has derivative $f'$ at $w$, then $z \mapsto \overline{f(\bar z)}$
+  has derivative $\overline{f'}$ at $\bar w$. Consequently, if $f$ is
+  analytic at $p$, then $z \mapsto \overline{f(\bar z)}$ is analytic at
+  $\bar p$.
+\end{lemma}
+\begin{proof}
+  \uses{lem:conjComp}
+  \leanok
+  A single conjugation (e.g.\ $f \circ \mathrm{conj}$) is generally
+  anti-holomorphic, but doubly conjugating both the argument and the
+  value is holomorphic again: this is checked at the level of the
+  Fr\'echet derivative, using that conjugation is $\R$-linear and that
+  conjugating a $\C$-linear scalar-multiplication map on both sides
+  yields another $\C$-linear scalar-multiplication map, by the
+  conjugated scalar.
+\end{proof}
+
+\begin{lemma}[Conjugation of Taylor coefficients and order]
+  \label{lem:taylorCoeffConj}
+  \uses{lem:conjComp, def:taylorCoeff}
+  \lean{Weierstrass.taylorCoeff_conj_comp_conj, Weierstrass.analyticOrderAt_conj_comp_conj}
+  \leanok
+  If $f$ is analytic at $0$ (resp. at $p$), then
+  $[z^n](\overline{f(\bar z)}) = \overline{[z^n]f}$ for all $n$, and the
+  order of vanishing of $\overline{f(\bar z)}$ at $\bar p$ equals the
+  order of vanishing of $f$ at $p$.
+\end{lemma}
+\begin{proof}
+  \uses{lem:taylorCoeffConj}
+  \leanok
+  The Taylor-coefficient statement follows by iterating
+  Lemma~\ref{lem:conjComp} order by order (using that eventual equality
+  of two functions near a point transfers through iterated derivatives).
+  The order statement follows by writing $f$ near $p$ as
+  $(z-p)^k \cdot \varphi(z)$ with $\varphi$ analytic and non-vanishing at
+  $p$, and doubly conjugating both $f$ and $\varphi$.
+\end{proof}
+
+\begin{lemma}[Necessity direction]
+  \label{lem:necessity}
+  \uses{def:disk, def:holomorphicOn, def:divisor, def:zeroDivisorOf,
+    def:conjInvariant, def:hasIntCoeffs, lem:taylorCoeffConj}
+  \lean{Weierstrass.conjInvariant_of_hasIntCoeffs}
+  \leanok
+  If $f$ is holomorphic on $\D$ with the zero divisor of $D$ and integer
+  Taylor coefficients, then $D$ is invariant under complex conjugation.
+\end{lemma}
+\begin{proof}
+  \uses{lem:necessity}
+  \leanok
+  Since every Taylor coefficient of $f$ is real (being an integer),
+  Lemma~\ref{lem:taylorCoeffConj} shows $f$ and $z \mapsto
+  \overline{f(\bar z)}$ have the same Taylor series at $0$; since both
+  are analytic and $\D$ is connected, the identity theorem for analytic
+  functions upgrades this to equality throughout $\D$. Applying the
+  order-preservation half of Lemma~\ref{lem:taylorCoeffConj} at each
+  $z \in \D$ then gives $m_{\bar z} = m_z$.
+\end{proof}
+
+\section{Sufficiency: the conjugate-pairing construction}
+
+The sufficiency direction cannot simply invoke
+Theorem~\ref{thm:propZi} as a black box: pairing a Gaussian-integer
+realization $g$ with its reflection $\overline{g(\bar z)}$ produces real,
+but not generally integer, coefficients (Remark on alternative
+symmetrization in the paper). Instead, the construction of
+Theorem~\ref{thm:propZi} is redone with the zeros of a conjugate-invariant
+divisor grouped into \emph{slots}: a single slot for each real zero, and a
+slot shared by each conjugate pair of nonreal zeros, indexed so that slot
+$j$ uses factors of order $j$ at flat positions $2j$ and $2j+1$. Because
+both factors of a slot share the same order, the correction constants
+can be linked ($\bar c$ for the conjugate-pair companion) so that the
+slot's combined contribution to the Taylor coefficients is always real,
+enabling rounding to the nearest \emph{integer} rather than nearest
+Gaussian integer.
+
+\begin{lemma}[Paired enumeration of a conjugate-invariant divisor]
+  \label{lem:pairedEnum}
+  \uses{def:divisor, def:conjInvariant, lem:enum}
+  \lean{Weierstrass.exists_pairedEnum_of_conjInvariant}
+  \leanok
+  Every effective divisor $D$ invariant under complex conjugation can be
+  enumerated in slots of two: even positions $a_{2j}$ list one point per
+  real zero or per conjugate-pair representative (with multiplicity),
+  and odd positions carry the real/conjugate companion of the preceding
+  even position (a fixed dummy point outside $\D$ when $a_{2j}$ is real,
+  since no companion is needed).
+\end{lemma}
+\begin{proof}
+  \uses{lem:pairedEnum}
+  \leanok
+  Apply Lemma~\ref{lem:enum} to the ``upper half'' divisor obtained by
+  restricting $D$'s multiplicities to points with non-negative imaginary
+  part (excluding $0$); since $D$ is conjugate-invariant, its full
+  support is recovered from this upper half together with its complex
+  conjugate.
+\end{proof}
+
+\begin{lemma}[Conjugate symmetry of a slot factor]
+  \label{lem:slotConjSymmetric}
+  \uses{def:E}
+  \lean{Weierstrass.E_conj, Weierstrass.conjSymmetric_E_real, Weierstrass.conjSymmetric_E_pair}
+  \leanok
+  Conjugating $E_n(w;\,c)$ conjugates both parameters:
+  $\overline{E_n(w;\,c)} = E_n(\bar w;\,\bar c)$ (since $E_n$'s defining
+  formula involves only $+,-,*,/,\exp$ applied to rational numeric
+  constants, all of which commute with conjugation). Consequently:
+  \begin{itemize}
+    \item if $a, c$ are real, $z \mapsto E_n(z/a;\,c)$ satisfies
+      $\overline{h(\bar z)} = h(z)$ for all $z$;
+    \item for any $a, c$, $z \mapsto E_n(z/a;\,c)\cdot E_n(z/\bar
+      a;\,\bar c)$ satisfies $\overline{h(\bar z)} = h(z)$ for all $z$.
+  \end{itemize}
+\end{lemma}
+\begin{proof}
+  \uses{lem:slotConjSymmetric}
+  \leanok
+  Direct computation from $\overline{E_n(w;\,c)} = E_n(\bar w;\,\bar c)$.
+  A function satisfying $\overline{h(\bar z)} = h(z)$ everywhere and
+  analytic at $0$ has real Taylor coefficients there, by
+  Lemma~\ref{lem:taylorCoeffConj}
+  (\lean{Weierstrass.taylorCoeff_real_of_conjSymmetric}); products of
+  such functions again satisfy the identity.
+\end{proof}
+
+\begin{lemma}[Paired coefficient forcing]
+  \label{lem:pairCoeffSeq}
+  \uses{lem:affine, lem:pairedEnum, lem:slotConjSymmetric}
+  \lean{Weierstrass.chooseCReal, Weierstrass.chooseCPair, Weierstrass.exists_pairCoeffSeq}
+  \leanok
+  Given the paired enumeration $a$ of Lemma~\ref{lem:pairedEnum}, there
+  is a correction-constant sequence $c : \N \to \C$ such that:
+  \begin{itemize}
+    \item at each slot $j$, the degree-$(j+1)$ Taylor coefficient of the
+      length-$2(j+1)$ partial product lies in $\Z$;
+    \item $\norm{c_k - 1} \le (\sqrt2/2)(\lfloor k/2\rfloor+1)
+      \norm{a_k}^{\lfloor k/2\rfloor + 1}$ for all $k$.
+  \end{itemize}
+  For a real-zero slot ($a_{2j}$ real), $c_{2j}$ is a real correction
+  constant forcing the coefficient to the nearest integer to its
+  (already-real, by Lemma~\ref{lem:slotConjSymmetric}) pre-existing
+  value, with rounding error $\le 1/2$; $c_{2j+1} = 1$ is trivial. For a
+  conjugate-pair slot, $c_{2j+1} = \overline{c_{2j}}$, and $c_{2j}$ is
+  chosen as the minimal-norm complex number forcing the combined,
+  real-affine shift $2\,\mathrm{Re}\bigl((c-1)/((j+1)a^{j+1})\bigr)$ to
+  the nearest integer, giving rounding error $\le (j+1)/4 \cdot
+  \norm{a_{2j}}^{j+1}$.
+\end{lemma}
+\begin{proof}
+  \uses{lem:pairCoeffSeq}
+  \leanok
+  For the real slot: identical to the inductive step of
+  Lemma~\ref{lem:coeffSeq}, using Lemma~\ref{lem:affine} with a real
+  target and real $a$, giving a real correction constant automatically
+  (not as an extra constraint). For the pair slot: applying
+  Lemma~\ref{lem:affine}(ii) twice (once for each factor of the pair)
+  gives a total shift $\tfrac{1}{j+1}\bigl((c-1)/a^{j+1} +
+  (\bar c - 1)/\bar a^{j+1}\bigr) = \tfrac{2}{j+1}\mathrm{Re}((c-1)/a^{j+1})$;
+  writing $c - 1 = K \cdot a^{j+1}$ for real $K$ solves
+  $\mathrm{Re}((c-1)\overline{a^{j+1}}) = K\norm{a}^{2(j+1)}$ with minimal
+  $\norm{c-1} = \abs K \norm a^{j+1}$, and choosing the real integer
+  target for $K$ (up to the factor $(j+1)/2$) gives the stated bound via
+  the standard nearest-integer estimate $\abs{\mathrm{round}(x)-x}\le
+  1/2$. A structural recursion (paralleling Lemma~\ref{lem:coeffSeq}'s)
+  builds the partial products and correction constants simultaneously,
+  slot by slot, maintaining the conjugate-symmetry invariant of
+  Lemma~\ref{lem:slotConjSymmetric} throughout.
+\end{proof}
+
+\begin{lemma}[Paired Weierstrass $M$-test]
+  \label{lem:pairMtest}
+  \uses{def:disk, lem:normG, lem:pairCoeffSeq, lem:pairedEnum}
+  \lean{Weierstrass.exists_Mtest_of_pairCoeffSeq}
+  \leanok
+  Given the bound on $c$ from Lemma~\ref{lem:pairCoeffSeq}, the factors
+  $E_{\lfloor k/2\rfloor}(z/a_k;\,c_k)$ satisfy a Weierstrass $M$-test on
+  every compact $K \subseteq \D$.
+\end{lemma}
+\begin{proof}
+  \uses{lem:pairMtest}
+  \leanok
+  As in Lemma~\ref{lem:Mtest}, but with order function
+  $n(k) = \lfloor k/2\rfloor$ in place of $n(k)=k$: since
+  $\lfloor k/2 \rfloor \to \infty$ at half the rate, the geometric
+  majorant $r^{\lfloor k/2\rfloor+1}$ is compared against $(\sqrt r)^k$
+  (using $2\lfloor k/2\rfloor + 2 \ge k$ for $\sqrt r < 1$), which is
+  still summable.
+\end{proof}
+
+\begin{proof}[Proof of Theorem~\ref{thm:main}, sufficiency direction]
+  \label{lem:sufficiency}
+  \uses{thm:main, lem:pairedEnum, lem:pairCoeffSeq, lem:pairMtest,
+    lem:holomorphicProduct, lem:taylorStabilize, lem:zeroSet}
+  \lean{Weierstrass.exists_holomorphic_int_coeffs_of_conjInvariant}
+  \leanok
+  Enumerate $D$ via Lemma~\ref{lem:pairedEnum} and force integer
+  coefficients slot by slot via Lemma~\ref{lem:pairCoeffSeq}, with order
+  function $n(k) = \lfloor k/2\rfloor$. The general holomorphy, Taylor
+  freezing, and zero-set lemmas of Section~\ref{chap:propZi}
+  (Lemmas~\ref{lem:holomorphicProduct}, \ref{lem:taylorStabilize},
+  \ref{lem:zeroSet}) are stated for a general (monotone, not
+  necessarily injective) order function, so they apply verbatim with
+  $n(k) = \lfloor k/2 \rfloor$ and the $M$-test of
+  Lemma~\ref{lem:pairMtest} in place of Lemma~\ref{lem:Mtest}. As in the
+  proof of Theorem~\ref{thm:propZi}, the origin is handled by an
+  explicit monomial factor $z^{m_0}$.
+\end{proof}

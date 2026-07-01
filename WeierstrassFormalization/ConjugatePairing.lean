@@ -249,7 +249,7 @@ theorem norm_sub_nearestIntC_le (x : ℝ) : ‖(x : ℂ) - nearestIntC x‖ ≤ 
 formula from `exists_c_taylorCoeff_mul_E_succ_eq`, given directly rather than by
 `Classical.choose` so that its realness, given real inputs, is immediate — see
 `chooseCReal_real`). -/
-private noncomputable def chooseCReal (h : ℂ → ℂ) (a : ℂ) (n : ℕ) : ℂ :=
+noncomputable def chooseCReal (h : ℂ → ℂ) (a : ℂ) (n : ℕ) : ℂ :=
   1 + (nearestIntC (taylorCoeff h (n + 1)).re - taylorCoeff h (n + 1))
     * (((n : ℂ) + 1) * a ^ (n + 1))
 
@@ -282,7 +282,7 @@ conjugate-pair slot (the second factor uses `conj c` at `conj a`), chosen as the
 solution forcing the *combined* degree-`(n+1)` coefficient to the nearest integer to
 `(taylorCoeff h (n+1)).re` (Theorem `thm:main`'s proof, "choose `c_n` to be the preimage of
 minimal modulus"). -/
-private noncomputable def chooseCPair (h : ℂ → ℂ) (a : ℂ) (n : ℕ) : ℂ :=
+noncomputable def chooseCPair (h : ℂ → ℂ) (a : ℂ) (n : ℕ) : ℂ :=
   1 + (((round (taylorCoeff h (n + 1)).re : ℝ) - (taylorCoeff h (n + 1)).re : ℝ) : ℂ)
     * ((n : ℂ) + 1) / 2 * a ^ (n + 1)
 

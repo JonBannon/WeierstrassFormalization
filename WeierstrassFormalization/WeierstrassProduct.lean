@@ -746,7 +746,7 @@ private theorem analyticOrderAt_E_one (n : ℕ) (c : ℂ) : analyticOrderAt (E n
   rw [hE_eq]
   exact hmul
 
-private theorem analyticOrderAt_E_div_self (n : ℕ) (c p : ℂ) (hp : p ≠ 0) :
+theorem analyticOrderAt_E_div_self (n : ℕ) (c p : ℂ) (hp : p ≠ 0) :
     analyticOrderAt (fun w => E n c (w / p)) p = 1 := by
   have hg : AnalyticAt ℂ (fun w : ℂ => w / p) p := by fun_prop
   have hg' : deriv (fun w : ℂ => w / p) p ≠ 0 := by

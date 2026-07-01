@@ -27,7 +27,7 @@ def HasIntCoeffs (f : ℂ → ℂ) : Prop :=
 
 /-- If `f` is holomorphic on `𝔻` with real (in particular, integer) Taylor coefficients, then `f`
 is invariant under the "double conjugation" `z ↦ conj (f (conj z))`, throughout `𝔻`. -/
-private theorem eqOn_conj_comp_conj_of_taylorCoeff_real {f : ℂ → ℂ} (hf : HolomorphicOn f)
+theorem eqOn_conj_comp_conj_of_taylorCoeff_real {f : ℂ → ℂ} (hf : HolomorphicOn f)
     (hreal : ∀ n, (starRingEnd ℂ) (taylorCoeff f n) = taylorCoeff f n) :
     Set.EqOn f (fun z => (starRingEnd ℂ) (f ((starRingEnd ℂ) z))) 𝔻 := by
   have h0 : (0 : ℂ) ∈ 𝔻 := by simp [mem_𝔻_iff]
@@ -66,7 +66,7 @@ private theorem eqOn_conj_comp_conj_of_taylorCoeff_real {f : ℂ → ℂ} (hf : 
 /-- **Necessity direction of Theorem `thm:main`.** If `f` is holomorphic on `𝔻` with the zero
 divisor of `D` and integer Taylor coefficients, then `D` is invariant under complex
 conjugation. -/
-private theorem conjInvariant_of_hasIntCoeffs {D : EffectiveDivisor} {f : ℂ → ℂ}
+theorem conjInvariant_of_hasIntCoeffs {D : EffectiveDivisor} {f : ℂ → ℂ}
     (hf : HolomorphicOn f) (hzd : IsZeroDivisorOf D f) (hcoeff : HasIntCoeffs f) :
     D.ConjInvariant := by
   have hreal : ∀ n, (starRingEnd ℂ) (taylorCoeff f n) = taylorCoeff f n := by
