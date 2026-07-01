@@ -170,10 +170,13 @@ private theorem eqOn_conj_comp_conj_of_taylorCoeff_real {f : ℂ → ℂ} (hf : 
     simpa using this
   have hpf := hf0.hasFPowerSeriesAt
   have hpg := hg0.hasFPowerSeriesAt
-  have hcoeff_eq : (fun n => taylorCoeff (fun z => (starRingEnd ℂ) (f ((starRingEnd ℂ) z))) n)
-      = fun n => taylorCoeff f n := by
+  have hcoeff_eq : (fun n => iteratedDeriv n (fun z => (starRingEnd ℂ) (f ((starRingEnd ℂ) z))) 0
+      / (n.factorial : ℂ)) = fun n => iteratedDeriv n f 0 / (n.factorial : ℂ) := by
     funext n
-    rw [taylorCoeff_conj_comp_conj hf0 n, hreal n]
+    have hstep := taylorCoeff_conj_comp_conj hf0 n
+    have hreal' := hreal n
+    unfold taylorCoeff at hstep hreal'
+    rw [hstep, hreal']
   rw [hcoeff_eq] at hpg
   obtain ⟨r1, hr1⟩ := hpf
   obtain ⟨r2, hr2⟩ := hpg
@@ -205,15 +208,19 @@ private theorem conjInvariant_of_hasIntCoeffs {D : EffectiveDivisor} {f : ℂ �
     rw [hk]
     simp
   have heqOn := eqOn_conj_comp_conj_of_taylorCoeff_real hf hreal
+  have h𝔻open : IsOpen 𝔻 := Metric.isOpen_ball
   intro z
   by_cases hz : z ∈ 𝔻
   · have hconjz : (starRingEnd ℂ) z ∈ 𝔻 := by
       rw [mem_𝔻_iff] at hz ⊢
       rwa [Complex.norm_conj]
     have horder := analyticOrderAt_conj_comp_conj (hf z hz)
+    have hev : f =ᶠ[nhds ((starRingEnd ℂ) z)]
+        (fun w => (starRingEnd ℂ) (f ((starRingEnd ℂ) w))) := by
+      filter_upwards [h𝔻open.mem_nhds hconjz] with w hw using heqOn hw
     have hcongr : analyticOrderAt (fun w => (starRingEnd ℂ) (f ((starRingEnd ℂ) w)))
         ((starRingEnd ℂ) z) = analyticOrderAt f ((starRingEnd ℂ) z) :=
-      analyticOrderAt_congr (heqOn.symm.eventuallyEq_of_mem (hf𝔻open.mem_nhds hconjz))
+      (analyticOrderAt_congr hev).symm
     rw [hcongr] at horder
     have h1 : D.mult ((starRingEnd ℂ) z) = analyticOrderNatAt f ((starRingEnd ℂ) z) :=
       hzd ((starRingEnd ℂ) z) hconjz
@@ -226,5 +233,40 @@ private theorem conjInvariant_of_hasIntCoeffs {D : EffectiveDivisor} {f : ℂ �
       rw [mem_𝔻_iff]
       rwa [Complex.norm_conj]
     rw [D.mult_eq_zero_of_not_mem_𝔻 z hz, D.mult_eq_zero_of_not_mem_𝔻 _ hconjz]
+
+/-! ## Sufficiency: conjugate-invariant divisors are realized with integer coefficients -/
+
+/-- **Sufficiency direction of Theorem `thm:main`.** Every effective divisor `D` on `𝔻`
+invariant under complex conjugation is the zero divisor of a holomorphic function on `𝔻`
+with integer Taylor coefficients.
+
+Proof sketch (paper, proof of Theorem `thm:main`): enumerate `D`'s support with multiplicity,
+grouping conjugate pairs of nonreal zeros to share a single "slot" of the construction (indexed
+`n(k) := k / 2`, so real zeros are padded with a dummy point outside `𝔻` at odd positions).
+For a real zero, force the degree-`(n+1)` Taylor coefficient to the nearest integer using a real
+correction constant `c`. For a conjugate pair `{a, ā}`, use correction constants `c, c̄`; since
+`E_n(z/a;c)·E_n(z/ā;c̄)` has real Taylor coefficients whenever `c̄ = conj c` (conjugating the
+whole defining formula of `E_n` commutes with its `+, -, *, /, exp` operations), the resulting
+degree-`(n+1)` shift `2 Re((c-1)/((n+1)a^{n+1}))` is a real-affine surjection of `c`; choose the
+minimal-norm `c` forcing it to the nearest integer. Both slot types keep the inductive-forcing
+and convergence estimates of `exists_coeffSeq`/`exists_Mtest_of_coeffSeq` intact (with at most a
+factor-`2` loss from the pair case), and the resulting partial products have real Taylor
+coefficients at every stage by construction, so no separate "rounding error can be unbounded"
+issue arises (unlike naively rounding a single unpaired nonreal zero's coefficient to `ℝ`). -/
+theorem exists_holomorphic_int_coeffs_of_conjInvariant (D : EffectiveDivisor)
+    (hD : D.ConjInvariant) :
+    ∃ f : ℂ → ℂ, HolomorphicOn f ∧ IsZeroDivisorOf D f ∧ HasIntCoeffs f := by
+  sorry
+
+/-- **Theorem `thm:main`.** An effective divisor `D` on `𝔻` is the zero
+divisor of a holomorphic function on `𝔻` with Taylor coefficients in `ℤ`
+if and only if `D` is invariant under complex conjugation. -/
+theorem exists_holomorphic_int_coeffs_iff_conjInvariant (D : EffectiveDivisor) :
+    (∃ f : ℂ → ℂ, HolomorphicOn f ∧ IsZeroDivisorOf D f ∧ HasIntCoeffs f) ↔
+      D.ConjInvariant := by
+  constructor
+  · rintro ⟨f, hf, hzd, hcoeff⟩
+    exact conjInvariant_of_hasIntCoeffs hf hzd hcoeff
+  · exact exists_holomorphic_int_coeffs_of_conjInvariant D
 
 end Weierstrass
