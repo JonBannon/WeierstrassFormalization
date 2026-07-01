@@ -17,7 +17,7 @@ corollary describing their unit groups, factorization, and the contraction map
 
 namespace Weierstrass
 
-open Complex
+open Complex Filter Topology
 
 /-! ## Taylor coefficients of a sum and a product -/
 
@@ -398,5 +398,225 @@ theorem isUnitOfIntRing_iff {f : ℂ → ℂ} (hf : HolomorphicOn f) (hfi : HasI
     intro n
     exact ⟨reciprocalSeq u kr n,
       hasCoeffsIn_inv (Int.castRingHom ℂ) hf hfnv kr hkr u hphiu n⟩
+
+/-! ## Proposition `prop:associate`: factorization up to units in `𝒪(𝔻)` -/
+
+/-- `𝔻` is preconnected (it is a ball, hence convex). -/
+theorem isPreconnected_𝔻 : IsPreconnected 𝔻 := (convex_ball (0 : ℂ) 1).isPreconnected
+
+/-- If `f` is holomorphic on `𝔻` and not identically zero there, its analytic order is finite
+at every point of `𝔻`: by the identity theorem, `f` cannot vanish identically near any point of
+the connected set `𝔻` without vanishing identically everywhere on `𝔻`. -/
+theorem analyticOrderAt_ne_top_of_ne_zero_somewhere {f : ℂ → ℂ} (hf : HolomorphicOn f)
+    (hfne : ∃ z ∈ 𝔻, f z ≠ 0) {z₀ : ℂ} (hz₀ : z₀ ∈ 𝔻) : analyticOrderAt f z₀ ≠ ⊤ := by
+  intro htop
+  rw [analyticOrderAt_eq_top] at htop
+  have hzero : Set.EqOn f 0 𝔻 :=
+    hf.eqOn_zero_of_preconnected_of_eventuallyEq_zero isPreconnected_𝔻 hz₀ htop
+  obtain ⟨z, hzD, hzne⟩ := hfne
+  exact hzne (hzero hzD)
+
+/-- **The zero divisor of a holomorphic function that is not identically zero.** Its support is
+locally finite by the identity theorem: a not-identically-zero analytic function on the connected
+set `𝔻` has isolated zeros, hence meets every compact subset in only finitely many of them. -/
+noncomputable def zeroDivisorOfHolomorphic (f : ℂ → ℂ) (hf : HolomorphicOn f)
+    (hfne : ∃ z ∈ 𝔻, f z ≠ 0) : EffectiveDivisor where
+  mult z := @ite _ (z ∈ 𝔻) (Classical.propDecidable _) (analyticOrderNatAt f z) 0
+  mult_eq_zero_of_not_mem_𝔻 z hz := if_neg hz
+  finite_inter_compact K hKsub hKcpt := by
+    rcases hf.eqOn_zero_or_eventually_ne_zero_of_preconnected isPreconnected_𝔻 with hz0 | hev
+    · obtain ⟨z, hzD, hzne⟩ := hfne
+      exact absurd (hz0 hzD) hzne
+    · have hmemK : {x : ℂ | f x ≠ 0} ∈ Filter.codiscreteWithin K :=
+        Filter.codiscreteWithin_mono hKsub hev
+      have hfin := hKcpt.finite_sdiff_of_mem_codiscreteWithin hmemK
+      refine Set.Finite.subset hfin (fun z hz => ?_)
+      obtain ⟨hzK, hzmult⟩ := hz
+      have hzD : z ∈ 𝔻 := hKsub hzK
+      rw [if_pos hzD] at hzmult
+      have hfz0 : f z = 0 := apply_eq_zero_of_analyticOrderNatAt_ne_zero hzmult
+      simp only [Set.mem_sdiff, Set.mem_setOf_eq, not_not]
+      exact ⟨hzK, hfz0⟩
+
+/-- The divisor `zeroDivisorOfHolomorphic f hf hfne` is indeed the zero divisor of `f`. -/
+theorem isZeroDivisorOf_zeroDivisorOfHolomorphic (f : ℂ → ℂ) (hf : HolomorphicOn f)
+    (hfne : ∃ z ∈ 𝔻, f z ≠ 0) :
+    IsZeroDivisorOf (zeroDivisorOfHolomorphic f hf hfne) f := by
+  classical
+  intro z hz
+  change (if z ∈ 𝔻 then analyticOrderNatAt f z else 0) = analyticOrderNatAt f z
+  rw [if_pos hz]
+
+/-- If `f` is holomorphic on `𝔻` and has finite analytic order at *one* point of `𝔻`, it has
+finite analytic order at *every* point of `𝔻` (it cannot be identically zero near that one
+point without being identically zero everywhere, by the identity theorem). -/
+theorem analyticOrderAt_ne_top_of_analyticOrderAt_ne_top_at {f : ℂ → ℂ} (hf : HolomorphicOn f)
+    {z₁ : ℂ} (hz₁ : z₁ ∈ 𝔻) (hfin : analyticOrderAt f z₁ ≠ ⊤) {z₀ : ℂ} (hz₀ : z₀ ∈ 𝔻) :
+    analyticOrderAt f z₀ ≠ ⊤ := by
+  intro htop
+  rw [analyticOrderAt_eq_top] at htop
+  have hzero : Set.EqOn f 0 𝔻 :=
+    hf.eqOn_zero_of_preconnected_of_eventuallyEq_zero isPreconnected_𝔻 hz₀ htop
+  apply hfin
+  rw [analyticOrderAt_eq_top]
+  filter_upwards [Metric.isOpen_ball.mem_nhds hz₁] with z hz using hzero hz
+
+/-- At a common zero of `f` and `g` of the same finite order, the ratio `f / g` has a
+removable singularity with a nonzero limit. -/
+theorem exists_tendsto_div_nhdsWithin_ne_of_analyticOrderNatAt_eq
+    {f g : ℂ → ℂ} {z₀ : ℂ} (hf : AnalyticAt ℂ f z₀) (hg : AnalyticAt ℂ g z₀)
+    (hf_fin : analyticOrderAt f z₀ ≠ ⊤) (hg_fin : analyticOrderAt g z₀ ≠ ⊤)
+    (horder : analyticOrderNatAt f z₀ = analyticOrderNatAt g z₀) :
+    ∃ L : ℂ, L ≠ 0 ∧ Tendsto (fun w => f w / g w) (𝓝[≠] z₀) (𝓝 L) := by
+  set n := analyticOrderNatAt f z₀ with hn_def
+  obtain ⟨f₁, hf₁_an, hf₁_ne, hf₁_eq⟩ := (hf.analyticOrderNatAt_eq_iff hf_fin).mp rfl
+  obtain ⟨g₁, hg₁_an, hg₁_ne, hg₁_eq⟩ :=
+    (hg.analyticOrderNatAt_eq_iff hg_fin (n := n)).mp horder.symm
+  refine ⟨f₁ z₀ / g₁ z₀, div_ne_zero hf₁_ne hg₁_ne, ?_⟩
+  have htendsto_quot : Tendsto (fun w => f₁ w / g₁ w) (𝓝[≠] z₀) (𝓝 (f₁ z₀ / g₁ z₀)) :=
+    (hf₁_an.continuousAt.tendsto.mono_left nhdsWithin_le_nhds).div
+      (hg₁_an.continuousAt.tendsto.mono_left nhdsWithin_le_nhds) hg₁_ne
+  refine htendsto_quot.congr' ?_
+  filter_upwards [hf₁_eq.filter_mono nhdsWithin_le_nhds, hg₁_eq.filter_mono nhdsWithin_le_nhds,
+    self_mem_nhdsWithin] with w hfw hgw hwne
+  have hpow_ne : (w - z₀) ^ n ≠ 0 := pow_ne_zero n (sub_ne_zero.mpr hwne)
+  rw [hfw, hgw, smul_eq_mul, smul_eq_mul, mul_div_mul_left _ _ hpow_ne]
+
+/-- **The key analytic lemma behind Proposition `prop:associate`.** If `f, g` are holomorphic
+on `𝔻`, have the same analytic order at every point, and this common order is nonzero
+somewhere (so neither is identically zero), then `f / g` extends to a holomorphic,
+nowhere-vanishing function `u` on `𝔻` with `f = g * u` throughout: at a common zero of `f` and
+`g`, the ratio `f / g` has a removable singularity with nonzero limit. -/
+theorem exists_holomorphicOn_nowhereVanishing_mul_eq_of_analyticOrderNatAt_eq
+    {f g : ℂ → ℂ} (hf : HolomorphicOn f) (hg : HolomorphicOn g)
+    (horder : ∀ z ∈ 𝔻, analyticOrderNatAt f z = analyticOrderNatAt g z)
+    (hsomepos : ∃ z ∈ 𝔻, analyticOrderNatAt f z ≠ 0) :
+    ∃ u : ℂ → ℂ, HolomorphicOn u ∧ (∀ z ∈ 𝔻, u z ≠ 0) ∧ ∀ z ∈ 𝔻, f z = g z * u z := by
+  classical
+  obtain ⟨z₁, hz₁, hz₁ne⟩ := hsomepos
+  have hf_fin1 : analyticOrderAt f z₁ ≠ ⊤ := fun h => hz₁ne (by simp [analyticOrderNatAt, h])
+  have hg_fin1 : analyticOrderAt g z₁ ≠ ⊤ := fun h => by
+    apply hz₁ne; rw [horder z₁ hz₁]; simp [analyticOrderNatAt, h]
+  have hf_fin : ∀ z ∈ 𝔻, analyticOrderAt f z ≠ ⊤ :=
+    fun z hz => analyticOrderAt_ne_top_of_analyticOrderAt_ne_top_at hf hz₁ hf_fin1 hz
+  have hg_fin : ∀ z ∈ 𝔻, analyticOrderAt g z ≠ ⊤ :=
+    fun z hz => analyticOrderAt_ne_top_of_analyticOrderAt_ne_top_at hg hz₁ hg_fin1 hz
+  -- the naive quotient, corrected by its limit at removable singularities
+  set u : ℂ → ℂ := fun z => if g z ≠ 0 then f z / g z else limUnder (𝓝[≠] z) (fun w => f w / g w)
+    with hu_def
+  have hu_eq_div : ∀ z, g z ≠ 0 → u z = f z / g z := fun z hz => by rw [hu_def]; simp [hz]
+  -- at a zero of `g`, both `f` and `g` vanish (matching orders), and `u z` is the nonzero limit
+  have hg_zero_imp : ∀ z ∈ 𝔻, g z = 0 → f z = 0 ∧ ∃ L, L ≠ 0 ∧
+      Tendsto (fun w => f w / g w) (𝓝[≠] z) (𝓝 L) ∧ u z = L ∧ ∀ᶠ w in 𝓝[≠] z, g w ≠ 0 := by
+    intro z hz hgz
+    have hgorder_ne : analyticOrderNatAt g z ≠ 0 := by
+      intro h0
+      have hcast := Nat.cast_analyticOrderNatAt (hg_fin z hz)
+      rw [h0] at hcast
+      exact (analyticOrderAt_ne_zero.mpr ⟨hg z hz, hgz⟩) (by exact_mod_cast hcast.symm)
+    have hforder_ne : analyticOrderNatAt f z ≠ 0 := by rw [horder z hz]; exact hgorder_ne
+    have hforder_ne' : analyticOrderAt f z ≠ 0 := by
+      intro h0
+      apply hforder_ne
+      have hfcast := Nat.cast_analyticOrderNatAt (hf_fin z hz)
+      rw [h0] at hfcast
+      exact_mod_cast hfcast
+    have hfz0 : f z = 0 := (analyticOrderAt_ne_zero.mp hforder_ne').2
+    obtain ⟨L, hLne, hLtendsto⟩ := exists_tendsto_div_nhdsWithin_ne_of_analyticOrderNatAt_eq
+      (hf z hz) (hg z hz) (hf_fin z hz) (hg_fin z hz) (horder z hz)
+    have hg_ev_ne : ∀ᶠ w in 𝓝[≠] z, g w ≠ 0 := by
+      rcases (hg z hz).eventually_eq_zero_or_eventually_ne_zero with h0 | hne
+      · exact absurd (analyticOrderAt_eq_top.mpr h0) (hg_fin z hz)
+      · exact hne
+    have huz : u z = L := by
+      have hu_eq : u z = limUnder (𝓝[≠] z) (fun w => f w / g w) := by
+        rw [hu_def]; exact if_neg (by simp [hgz])
+      rw [hu_eq]; exact hLtendsto.limUnder_eq
+    exact ⟨hfz0, L, hLne, hLtendsto, huz, hg_ev_ne⟩
+  refine ⟨u, fun z hz => ?_, fun z hz => ?_, fun z hz => ?_⟩
+  · -- `HolomorphicOn u`
+    by_cases hgz : g z = 0
+    · obtain ⟨hfz0, L, hLne, hLtendsto, huz, hg_ev_ne⟩ := hg_zero_imp z hz hgz
+      have hg_ev_ne' : ∀ᶠ w in 𝓝 z, w ≠ z → g w ≠ 0 := eventually_nhdsWithin_iff.mp hg_ev_ne
+      have hu_eq_update : u =ᶠ[𝓝 z] Function.update (fun w => f w / g w) z L := by
+        filter_upwards [hg_ev_ne'] with w hw
+        by_cases hwz : w = z
+        · subst hwz; rw [huz, Function.update_self]
+        · rw [hu_eq_div w (hw hwz), Function.update_of_ne hwz]
+      have hu_cont : ContinuousAt u z :=
+        (continuousAt_update_same.mpr hLtendsto).congr hu_eq_update.symm
+      have hu_diff : ∀ᶠ w in 𝓝[≠] z, DifferentiableAt ℂ u w := by
+        have h𝔻nhds : 𝔻 ∈ 𝓝 z := Metric.isOpen_ball.mem_nhds hz
+        filter_upwards [hg_ev_ne, mem_nhdsWithin_of_mem_nhds h𝔻nhds] with w hgw hwD
+        have hu_eq_near : u =ᶠ[𝓝 w] (fun v => f v / g v) := by
+          filter_upwards [(hg w hwD).continuousAt.eventually_ne hgw] with v hv
+          exact hu_eq_div v hv
+        exact ((hf w hwD).div (hg w hwD) hgw).differentiableAt.congr_of_eventuallyEq hu_eq_near
+      exact Complex.analyticAt_of_differentiable_on_punctured_nhds_of_continuousAt hu_diff hu_cont
+    · have hu_eq_near : u =ᶠ[𝓝 z] (fun w => f w / g w) := by
+        filter_upwards [(hg z hz).continuousAt.eventually_ne hgz] with w hw
+        exact hu_eq_div w hw
+      exact ((hf z hz).div (hg z hz) hgz).congr hu_eq_near.symm
+  · -- `∀ z ∈ 𝔻, u z ≠ 0`
+    by_cases hgz : g z = 0
+    · obtain ⟨-, L, hLne, -, huz, -⟩ := hg_zero_imp z hz hgz
+      rw [huz]; exact hLne
+    · rw [hu_eq_div z hgz]
+      have hgorder0 : analyticOrderAt g z = 0 := analyticOrderAt_eq_zero.mpr (Or.inr hgz)
+      have hforder0 : analyticOrderAt f z = 0 := by
+        have hgcast : (analyticOrderNatAt g z : ℕ∞) = 0 := by
+          rw [Nat.cast_analyticOrderNatAt (hg_fin z hz), hgorder0]
+        have hgnat0 : analyticOrderNatAt g z = 0 := by exact_mod_cast hgcast
+        have hfnat0 : analyticOrderNatAt f z = 0 := by rw [horder z hz]; exact hgnat0
+        have hfcast : (analyticOrderNatAt f z : ℕ∞) = analyticOrderAt f z :=
+          Nat.cast_analyticOrderNatAt (hf_fin z hz)
+        rw [hfnat0] at hfcast
+        exact hfcast.symm
+      have hfz_ne : f z ≠ 0 := by
+        rcases analyticOrderAt_eq_zero.mp hforder0 with h | h
+        · exact absurd (hf z hz) h
+        · exact h
+      exact div_ne_zero hfz_ne hgz
+  · -- `∀ z ∈ 𝔻, f z = g z * u z`
+    by_cases hgz : g z = 0
+    · obtain ⟨hfz0, -, -, -, -, -⟩ := hg_zero_imp z hz hgz
+      rw [hfz0, hgz, zero_mul]
+    · rw [hu_eq_div z hgz, mul_div_cancel₀ _ hgz]
+
+/-- **Proposition `prop:associate` (Factorization up to units in `𝒪(𝔻)`).** Every `f ∈ 𝒪(𝔻)`
+can be written `f = g * u` with `g ∈ ℛ` and `u ∈ 𝒪(𝔻)ˣ` (holomorphic and nowhere-vanishing). -/
+theorem exists_hasGaussianIntCoeffs_mul_nowhereVanishing (f : ℂ → ℂ) (hf : HolomorphicOn f) :
+    ∃ g u : ℂ → ℂ, HolomorphicOn g ∧ HasGaussianIntCoeffs g ∧
+      HolomorphicOn u ∧ (∀ z ∈ 𝔻, u z ≠ 0) ∧ ∀ z ∈ 𝔻, f z = g z * u z := by
+  by_cases hfzero : ∀ z ∈ 𝔻, f z = 0
+  · -- `f ≡ 0` on `𝔻`: take `g = 0`, `u = 1`.
+    exact ⟨fun _ => 0, fun _ => 1, fun _ _ => analyticAt_const, hasGaussianIntCoeffs_zero,
+      fun _ _ => analyticAt_const, fun _ _ => one_ne_zero,
+      fun z hz => by rw [hfzero z hz]; ring⟩
+  · push Not at hfzero
+    by_cases hfnv : ∀ z ∈ 𝔻, f z ≠ 0
+    · -- `f` is already nowhere-vanishing: take `g = 1`, `u = f`.
+      exact ⟨fun _ => 1, f, fun _ _ => analyticAt_const, hasGaussianIntCoeffs_one, hf, hfnv,
+        fun z _ => by ring⟩
+    · -- `f` has at least one zero: apply Theorem `prop:Zi` to its zero divisor.
+      push Not at hfnv
+      obtain ⟨z0, hz0D, hfz0⟩ := hfnv
+      have hfne : ∃ z ∈ 𝔻, f z ≠ 0 := hfzero
+      set Df := zeroDivisorOfHolomorphic f hf hfne with hDf_def
+      have hIsZDf : IsZeroDivisorOf Df f := isZeroDivisorOf_zeroDivisorOfHolomorphic f hf hfne
+      obtain ⟨g, hg_holo, hg_zd, hg_int⟩ :=
+        exists_holomorphic_gaussianInt_coeffs_of_effectiveDivisor Df
+      have horder : ∀ z ∈ 𝔻, analyticOrderNatAt f z = analyticOrderNatAt g z := by
+        intro z hz; rw [← hIsZDf z hz, ← hg_zd z hz]
+      have hsomepos : ∃ z ∈ 𝔻, analyticOrderNatAt f z ≠ 0 := by
+        refine ⟨z0, hz0D, fun h0 => ?_⟩
+        have hcast : (analyticOrderNatAt f z0 : ℕ∞) = 0 := by exact_mod_cast h0
+        rw [Nat.cast_analyticOrderNatAt (analyticOrderAt_ne_top_of_ne_zero_somewhere hf hfne hz0D)]
+          at hcast
+        exact (analyticOrderAt_ne_zero.mpr ⟨hf z0 hz0D, hfz0⟩) hcast
+      obtain ⟨u, hu_holo, hu_nv, hu_eq⟩ :=
+        exists_holomorphicOn_nowhereVanishing_mul_eq_of_analyticOrderNatAt_eq
+          hf hg_holo horder hsomepos
+      exact ⟨g, u, hg_holo, hg_int, hu_holo, hu_nv, hu_eq⟩
 
 end Weierstrass
