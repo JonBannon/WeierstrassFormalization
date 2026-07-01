@@ -829,10 +829,10 @@ escape property with `s` slightly above `‖z‖`). The initial finite product h
 same `M`-test and `tprod_one_add_ne_zero_of_summable`-style non-vanishing criterion used in
 `holomorphicOn_tprod_factors`, is holomorphic and non-vanishing near `z`, contributing order
 `0`. -/
-theorem isZeroDivisorOf_tprod_factors (ha0 : ∀ k, a k ≠ 0)
+theorem analyticOrderAt_tprod_factors_eq_ncard (ha0 : ∀ k, a k ≠ 0)
     (hM : ∀ K ⊆ 𝔻, IsCompact K → ∃ u : ℕ → ℝ, Summable u ∧
       ∀ k, ∀ z ∈ K, ‖E (n k) (c k) (z / a k) - 1‖ ≤ u k) (z : ℂ) (hz : z ∈ 𝔻) :
-    analyticOrderNatAt (fun w => ∏' k, E (n k) (c k) (w / a k)) z = {k | a k = z}.ncard := by
+    analyticOrderAt (fun w => ∏' k, E (n k) (c k) (w / a k)) z = ({k | a k = z}.ncard : ℕ∞) := by
   classical
   have h𝔻open : IsOpen 𝔻 := Metric.isOpen_ball
   -- an `M`-test bound at the single point `z`, giving a bound `N` beyond which no factor
@@ -924,9 +924,15 @@ theorem isZeroDivisorOf_tprod_factors (ha0 : ∀ k, a k ≠ 0)
       simp only [Set.mem_setOf_eq, Finset.coe_filter, Finset.mem_range, Set.mem_setOf_eq]
       exact ⟨fun h => ⟨hsub h, h⟩, fun h => h.2⟩
     rw [hset_eq, Set.ncard_coe_finset]
+  rw [horder_final, analyticOrderAt_partialProduct_eq a c n ha0 z N, ← hcard_eq]
+
+/-- **Zero-divisor identification**, `ℕ`-valued form (as required by `IsZeroDivisorOf`). -/
+theorem isZeroDivisorOf_tprod_factors (ha0 : ∀ k, a k ≠ 0)
+    (hM : ∀ K ⊆ 𝔻, IsCompact K → ∃ u : ℕ → ℝ, Summable u ∧
+      ∀ k, ∀ z ∈ K, ‖E (n k) (c k) (z / a k) - 1‖ ≤ u k) (z : ℂ) (hz : z ∈ 𝔻) :
+    analyticOrderNatAt (fun w => ∏' k, E (n k) (c k) (w / a k)) z = {k | a k = z}.ncard := by
   unfold analyticOrderNatAt
-  rw [horder_final, analyticOrderAt_partialProduct_eq a c n ha0 z N]
-  rw [← hcard_eq]
+  rw [analyticOrderAt_tprod_factors_eq_ncard ha0 hM z hz]
   simp
 
 /-! ## Passing Taylor coefficients to the limit -/
