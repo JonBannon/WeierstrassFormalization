@@ -320,7 +320,62 @@ theorem exists_enum_of_effectiveDivisor (D : EffectiveDivisor) :
         rw [this, Set.ncard_empty]
   · -- escape property
     intro s hs
-    sorry
+    set T : Set ℂ := D.support ∩ Metric.closedBall 0 s with hT_def
+    have hTfin : T.Finite := by
+      rw [hT_def, Set.inter_comm]
+      refine D.finite_inter_compact _ (fun z hz => ?_) (isCompact_closedBall 0 s)
+      rw [Metric.mem_closedBall, dist_zero_right] at hz
+      exact mem_𝔻_iff.mpr (lt_of_le_of_lt hz hs)
+    have hfiber_fin : ∀ z ∈ T, {k | a k = z}.Finite := by
+      intro z hzT
+      have hz2 : z ≠ 2 := by
+        intro h
+        rw [hT_def] at hzT
+        have hzball := hzT.2
+        rw [Metric.mem_closedBall, dist_zero_right, h] at hzball
+        norm_num at hzball
+        linarith
+      by_cases hzS : z ∈ S
+      · set zS : ↥S := ⟨z, hzS⟩ with hzS_def
+        have hsub2 : {k | a k = z}
+            ⊆ Set.range (ι ∘ fun i : Fin (D.mult zS) => (⟨zS, i⟩ : ZigmaT)) := by
+          intro k hak
+          simp only [Set.mem_setOf_eq] at hak
+          have hex : ∃ σ : ZigmaT, ι σ = k := by
+            by_contra hne; rw [ha_of_not_ex hne] at hak; exact hz2 hak.symm
+          rw [ha_of_ex hex] at hak
+          generalize hσeq : Classical.choose hex = σ₀ at hak
+          obtain ⟨z₁, i₁⟩ := σ₀
+          have hz1 : z₁ = zS := Subtype.ext hak
+          subst hz1
+          refine ⟨i₁, ?_⟩
+          simp only [Function.comp_apply]
+          rw [← hσeq]
+          exact Classical.choose_spec hex
+        exact Set.Finite.subset (Set.finite_range _) hsub2
+      · have hempty : {k | a k = z} ⊆ (∅ : Set ℕ) := by
+          intro k hak
+          simp only [Set.mem_setOf_eq] at hak
+          by_cases hex : ∃ σ : ZigmaT, ι σ = k
+          · rw [ha_of_ex hex] at hak
+            exact absurd (hak ▸ (Classical.choose hex).1.2) hzS
+          · rw [ha_of_not_ex hex] at hak
+            exact hz2 hak.symm
+        exact Set.Finite.subset Set.finite_empty hempty
+    have hsub : {k | ‖a k‖ < s} ⊆ ⋃ z ∈ T, {k | a k = z} := by
+      intro k hk
+      simp only [Set.mem_setOf_eq] at hk
+      have hak_mem : ∃ σ : ZigmaT, ι σ = k := by
+        by_contra hne
+        rw [ha_of_not_ex hne] at hk
+        have h2 : ‖(2 : ℂ)‖ = 2 := by norm_num
+        rw [h2] at hk
+        linarith
+      have hakT : a k ∈ T := by
+        rw [hT_def, Set.mem_inter_iff, Metric.mem_closedBall, dist_zero_right]
+        exact ⟨(haS k hak_mem).1, le_of_lt hk⟩
+      exact Set.mem_iUnion₂.mpr ⟨a k, hakT, rfl⟩
+    exact Set.Finite.subset (Set.Finite.biUnion hTfin hfiber_fin) hsub
 
 /-! ## The partial products and the inductive rounding step -/
 
@@ -449,7 +504,7 @@ theorem exists_coeffSeq (a : ℕ → ℂ) (ha0 : ∀ k, a k ≠ 0) :
   | zero =>
       refine ⟨1, ?_⟩
       rw [← hPeq]
-      change taylorCoeff (fun _ => (1:ℂ)) 0 = ((1 : GaussianInt) : ℂ)
+      change taylorCoeff (fun _ => (1 : ℂ)) 0 = ((1 : GaussianInt) : ℂ)
       simp [taylorCoeff, iteratedDeriv_zero]
   | succ N =>
       refine ⟨nearestGaussianInt (taylorCoeff (auxP a N) (N + 1)), ?_⟩
@@ -639,6 +694,22 @@ theorem holomorphicOn_tprod_factors
   unfold HolomorphicOn AnalyticOnNhd
   intro z hz
   exact (hdiff.analyticAt (h𝔻open.mem_nhds hz))
+
+/-- **Iterated derivatives pass to a locally uniform limit** of entire functions. -/
+private theorem tendsto_iteratedDeriv_of_tendstoLocallyUniformlyOn
+    {F : ℕ → ℂ → ℂ} {f : ℂ → ℂ} {U : Set ℂ} (hU : IsOpen U)
+    (hFdiff : ∀ N, Differentiable ℂ (F N))
+    (hconv : TendstoLocallyUniformlyOn F f Filter.atTop U)
+    (m : ℕ) {x : ℂ} (hx : x ∈ U) :
+    Filter.Tendsto (fun N => iteratedDeriv m (F N) x) Filter.atTop (nhds (iteratedDeriv m f x)) := by
+  induction m generalizing F f with
+  | zero => simpa using hconv.tendsto_at hx
+  | succ m ih =>
+      have hderivconv : TendstoLocallyUniformlyOn (deriv ∘ F) (deriv f) Filter.atTop U :=
+        hconv.deriv (Filter.Eventually.of_forall fun N => (hFdiff N).differentiableOn) hU
+      have hderivdiff : ∀ N, Differentiable ℂ ((deriv ∘ F) N) := fun N => (hFdiff N).deriv
+      simp only [iteratedDeriv_succ']
+      exact ih hderivdiff hderivconv hx
 
 /-! ## The zero divisor of the product -/
 
