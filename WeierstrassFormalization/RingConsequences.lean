@@ -694,4 +694,157 @@ theorem prop_inject {m m' : Set (ℂ → ℂ)} (hm : IsMaximalIdealOD m) (hm' : 
   · exact heq.symm
   · exact absurd htop hm'.proper
 
+/-! ## Proposition `prop:fiber`: the augmentation ideal -/
+
+theorem hasGaussianIntCoeffs_const (z : GaussianInt) :
+    HasGaussianIntCoeffs (fun _ : ℂ => (z : ℂ)) := by
+  intro n
+  rw [taylorCoeff_const]
+  by_cases hn : n = 0
+  · exact ⟨z, by simp [hn]⟩
+  · exact ⟨0, by simp [hn, GaussianInt.toComplex_zero]⟩
+
+theorem hasGaussianIntCoeffs_id : HasGaussianIntCoeffs (fun z : ℂ => z) := by
+  intro n
+  unfold taylorCoeff
+  rw [iteratedDeriv_fun_id_zero]
+  by_cases hn : n = 1
+  · exact ⟨1, by simp [hn]⟩
+  · exact ⟨0, by simp [hn]⟩
+
+/-- **The augmentation ideal `𝔫₀ = {f ∈ ℛ : f(0) = 0}`.** -/
+def augmentationIdeal : Set (ℂ → ℂ) := {f | HolomorphicOn f ∧ HasGaussianIntCoeffs f ∧ f 0 = 0}
+
+/-- **`𝔪₀ = ker(ev₀) ⊂ 𝒪(𝔻)`**, the ideal of functions vanishing at the origin. -/
+def evalZeroIdeal : Set (ℂ → ℂ) := {f | HolomorphicOn f ∧ f 0 = 0}
+
+/-- If `f` is holomorphic on `𝔻` and `f(0) = 0`, then `f = z · h` on `𝔻` for a holomorphic `h`
+(namely `dslope f 0`, whose defining property `sub_smul_dslope_of_zero` gives this directly). -/
+theorem exists_holomorphic_eq_id_mul_of_eval_zero {f : ℂ → ℂ} (hf : HolomorphicOn f)
+    (hf0 : f 0 = 0) : ∃ h : ℂ → ℂ, HolomorphicOn h ∧ ∀ z ∈ 𝔻, f z = z * h z := by
+  refine ⟨dslope f 0, fun z hz => ?_, fun z _ => ?_⟩
+  · by_cases hz0 : z = 0
+    · subst hz0
+      have h𝔻nhds : 𝔻 ∈ 𝓝 (0 : ℂ) := Metric.isOpen_ball.mem_nhds hz
+      have hdiff : ∀ᶠ w in 𝓝[≠] (0 : ℂ), DifferentiableAt ℂ (dslope f 0) w := by
+        filter_upwards [mem_nhdsWithin_of_mem_nhds h𝔻nhds, self_mem_nhdsWithin]
+          with w hwD hwne
+        exact (differentiableAt_dslope_of_ne hwne).mpr (hf w hwD).differentiableAt
+      have hcont : ContinuousAt (dslope f 0) 0 :=
+        continuousAt_dslope_same.mpr (hf 0 hz).differentiableAt
+      exact Complex.analyticAt_of_differentiable_on_punctured_nhds_of_continuousAt hdiff hcont
+    · have hzD : z ∈ 𝔻 := hz
+      set s : Set ℂ := 𝔻 ∩ {w : ℂ | w ≠ 0} with hs_def
+      have hsopen : IsOpen s := Metric.isOpen_ball.inter isOpen_ne
+      have hsmem : s ∈ 𝓝 z := hsopen.mem_nhds ⟨hzD, hz0⟩
+      have hdiffOn : DifferentiableOn ℂ (dslope f 0) s := by
+        intro w hw
+        exact ((differentiableAt_dslope_of_ne hw.2).mpr
+          (hf w hw.1).differentiableAt).differentiableWithinAt
+      exact hdiffOn.analyticAt hsmem
+  · have := sub_smul_dslope_of_zero hf0 z
+    rw [smul_eq_mul, sub_zero] at this
+    exact this.symm
+
+theorem isIdealOD_evalZeroIdeal : IsIdealOD evalZeroIdeal where
+  subset_holomorphic := fun f hf => hf.1
+  add_mem := fun f hf g hg => ⟨fun z hz => (hf.1 z hz).add (hg.1 z hz), by
+    change f 0 + g 0 = 0; rw [hf.2, hg.2]; ring⟩
+  smul_mem := fun h hh f hf => ⟨fun z hz => (hh z hz).mul (hf.1 z hz), by
+    change h 0 * f 0 = 0; rw [hf.2]; ring⟩
+  congr_on_𝔻 := fun f hf f' hf' heq => ⟨hf', by rw [← heq zero_mem_𝔻]; exact hf.2⟩
+
+/-- **Proposition `prop:fiber`, maximality of `𝔪₀`.** `evalZeroIdeal` is a maximal ideal of
+`𝒪(𝔻)`. -/
+theorem isMaximalIdealOD_evalZeroIdeal : IsMaximalIdealOD evalZeroIdeal where
+  isIdeal := isIdealOD_evalZeroIdeal
+  proper := by
+    intro hcontra
+    have h1 : (fun _ : ℂ => (1 : ℂ)) ∈ evalZeroIdeal := by
+      rw [hcontra]
+      exact fun _ _ => analyticAt_const
+    exact one_ne_zero h1.2
+  maximal := by
+    intro J hJ hsub
+    by_cases hJeq : J = evalZeroIdeal
+    · exact Or.inl hJeq
+    · refine Or.inr ?_
+      have : ∃ f ∈ J, f 0 ≠ 0 := by
+        by_contra hcon
+        push Not at hcon
+        apply hJeq
+        refine Set.Subset.antisymm ?_ hsub
+        intro f hfJ
+        exact ⟨hJ.subset_holomorphic f hfJ, hcon f hfJ⟩
+      obtain ⟨f, hfJ, hf0⟩ := this
+      have hf_holo : HolomorphicOn f := hJ.subset_holomorphic f hfJ
+      set c : ℂ := f 0 with hc_def
+      have hc_holo : HolomorphicOn (fun _ : ℂ => c) := fun _ _ => analyticAt_const
+      have hneg_mem : (fun z => (-1 : ℂ) * c) ∈ J := by
+        have := hJ.smul_mem (fun _ => (-1 : ℂ)) (fun _ _ => analyticAt_const) (fun _ => c)
+        apply this
+        have hcmem : (fun z : ℂ => f z - c) ∈ evalZeroIdeal := by
+          refine ⟨(hf_holo.sub hc_holo), ?_⟩
+          change f 0 - c = 0; rw [hc_def]; ring
+        have hg_mem : (fun z : ℂ => f z - c) ∈ J := hsub hcmem
+        have hfsub : (fun z : ℂ => f z + (-1 : ℂ) * (f z - c)) ∈ J :=
+          hJ.add_mem f hfJ (fun z => (-1 : ℂ) * (f z - c))
+            (hJ.smul_mem (fun _ => (-1 : ℂ)) (fun _ _ => analyticAt_const) _ hg_mem)
+        have heqc : (fun z : ℂ => f z + (-1 : ℂ) * (f z - c)) = (fun _ : ℂ => c) := by
+          funext z; ring
+        rwa [heqc] at hfsub
+      have hone_mem : (fun _ : ℂ => (1 : ℂ)) ∈ J := by
+        have hcinv : (fun _ : ℂ => c⁻¹) ∈ (Set.univ : Set (ℂ → ℂ)) := trivial
+        have := hJ.smul_mem (fun _ => c⁻¹) (fun _ _ => analyticAt_const)
+          (fun _ => (-1 : ℂ) * c) hneg_mem
+        have heq1 : (fun z : ℂ => c⁻¹ * ((-1 : ℂ) * c)) = (fun _ : ℂ => (-1 : ℂ)) := by
+          funext z; field_simp
+        rw [heq1] at this
+        have := hJ.smul_mem (fun _ => (-1 : ℂ)) (fun _ _ => analyticAt_const) _ this
+        have heq2 : (fun z : ℂ => (-1 : ℂ) * (-1 : ℂ)) = (fun _ : ℂ => (1 : ℂ)) := by
+          funext z; ring
+        rwa [heq2] at this
+      ext f'
+      simp only [Set.mem_setOf_eq]
+      refine ⟨hJ.subset_holomorphic f', fun hf'_holo => ?_⟩
+      have hf'_eq : f' = fun z => f' z * (1 : ℂ) := by funext z; ring
+      rw [hf'_eq]
+      exact hJ.smul_mem f' hf'_holo _ hone_mem
+
+/-- **`φ(𝔪₀) = 𝔫₀`.** The contraction of `𝔪₀ = ker(ev₀)` is exactly the augmentation ideal. -/
+theorem contraction_evalZeroIdeal_eq_augmentationIdeal :
+    {f | f ∈ evalZeroIdeal ∧ HasGaussianIntCoeffs f} = augmentationIdeal := by
+  ext f
+  constructor
+  · rintro ⟨⟨hf_holo, hf0⟩, hf_int⟩
+    exact ⟨hf_holo, hf_int, hf0⟩
+  · rintro ⟨hf_holo, hf_int, hf0⟩
+    exact ⟨⟨hf_holo, hf0⟩, hf_int⟩
+
+/-- **Proposition `prop:fiber`, first part (evaluation surjects onto `ℤ[i]`).** Every Gaussian
+integer arises as the value at `0` of some element of `ℛ`; together with `augmentationIdeal`
+being (by definition) exactly the kernel of this evaluation, this is the content of
+`ℛ / 𝔫₀ ≅ ℤ[i]`. -/
+theorem exists_holomorphic_gaussianIntCoeffs_eval_eq (z : GaussianInt) :
+    ∃ f : ℂ → ℂ, HolomorphicOn f ∧ HasGaussianIntCoeffs f ∧ f 0 = (z : ℂ) :=
+  ⟨fun _ => (z : ℂ), fun _ _ => analyticAt_const, hasGaussianIntCoeffs_const z, rfl⟩
+
+/-- **Proposition `prop:fiber`, third part.** If `𝔪` is a maximal ideal of `𝒪(𝔻)` whose
+contraction `𝔪 ∩ ℛ` contains the augmentation ideal `𝔫₀`, then in fact `𝔪 ∩ ℛ = 𝔫₀`: no prime of
+`ℛ` *strictly* containing `𝔫₀` arises as a contraction. -/
+theorem contraction_eq_augmentationIdeal_of_superset {m : Set (ℂ → ℂ)} (hm : IsMaximalIdealOD m)
+    (hsuper : augmentationIdeal ⊆ {f | f ∈ m ∧ HasGaussianIntCoeffs f}) :
+    {f | f ∈ m ∧ HasGaussianIntCoeffs f} = augmentationIdeal := by
+  have hid_mem_aug : (fun z : ℂ => z) ∈ augmentationIdeal :=
+    ⟨fun _ _ => analyticAt_id, hasGaussianIntCoeffs_id, rfl⟩
+  have hid_mem_m : (fun z : ℂ => z) ∈ m := (hsuper hid_mem_aug).1
+  have hevalZero_sub_m : evalZeroIdeal ⊆ m := by
+    intro f hf
+    obtain ⟨h, hh_holo, hfh⟩ := exists_holomorphic_eq_id_mul_of_eval_zero hf.1 hf.2
+    have hprod_mem : (fun z => h z * z) ∈ m := hm.isIdeal.smul_mem h hh_holo _ hid_mem_m
+    exact hm.isIdeal.congr_on_𝔻 _ hprod_mem f hf.1 (fun z hz => by rw [hfh z hz, mul_comm])
+  rcases isMaximalIdealOD_evalZeroIdeal.maximal m hm.isIdeal hevalZero_sub_m with heq | htop
+  · rw [heq, contraction_evalZeroIdeal_eq_augmentationIdeal]
+  · exact absurd htop hm.proper
+
 end Weierstrass
