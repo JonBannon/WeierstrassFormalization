@@ -4,3 +4,9 @@
 /blueprint/print/
 /blueprint/web/
 /blueprint/.gitignore
+
+# LaTeX build outputs for the paper
+/integer_weierstrass_18.aux
+/integer_weierstrass_18.log
+/integer_weierstrass_18.out
+/integer_weierstrass_18.pdf
