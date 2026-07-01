@@ -170,6 +170,31 @@ private lemma iteratedDeriv_auxQ {n : ℕ} (c : ℂ) {k : ℕ} (hk1 : 1 ≤ k) (
   · intro hk_notmem
     exact absurd (Finset.mem_Icc.mpr ⟨hk1, hkn⟩) hk_notmem
 
+private lemma iteratedDeriv_auxQ_succ (n : ℕ) (c : ℂ) :
+    iteratedDeriv (n + 1) (auxQ n c) 0 = c * (Nat.factorial n : ℂ) := by
+  have h1 : iteratedDeriv (n + 1) (fun w : ℂ => ∑ j ∈ Finset.Icc 1 n, w ^ j / j) 0
+      = ∑ j ∈ Finset.Icc 1 n, iteratedDeriv (n + 1) (fun w : ℂ => w ^ j / j) 0 :=
+    iteratedDeriv_fun_sum (fun j _ => by fun_prop)
+  have h1' : iteratedDeriv (n + 1) (fun w : ℂ => ∑ j ∈ Finset.Icc 1 n, w ^ j / j) 0 = 0 := by
+    rw [h1]
+    refine Finset.sum_eq_zero (fun j hj => ?_)
+    rw [Finset.mem_Icc] at hj
+    rw [iteratedDeriv_div_const, iteratedDeriv_fun_pow_zero, if_neg (by omega)]
+    simp
+  have h3 : iteratedDeriv (n + 1) (fun w : ℂ => c * w ^ (n + 1) / (n + 1)) 0
+      = c * (Nat.factorial n : ℂ) := by
+    rw [iteratedDeriv_div_const, iteratedDeriv_const_mul_field, iteratedDeriv_fun_pow_zero,
+      if_pos rfl, Nat.factorial_succ]
+    have hn1 : ((n : ℂ) + 1) ≠ 0 := by exact_mod_cast Nat.succ_ne_zero n
+    push_cast
+    field_simp
+  have h4 : iteratedDeriv (n + 1) (auxQ n c) 0
+      = iteratedDeriv (n + 1) (fun w : ℂ => ∑ j ∈ Finset.Icc 1 n, w ^ j / j) 0
+        + iteratedDeriv (n + 1) (fun w : ℂ => c * w ^ (n + 1) / (n + 1)) 0 := by
+    unfold auxQ
+    exact iteratedDeriv_fun_add (by fun_prop) (by fun_prop)
+  rw [h4, h1', zero_add, h3]
+
 private lemma iteratedDeriv_log_one_sub {k : ℕ} (hk1 : 1 ≤ k) :
     iteratedDeriv k (fun w : ℂ => Complex.log (1 - w)) 0 = -(Nat.factorial (k - 1) : ℂ) := by
   obtain ⟨j, rfl⟩ := Nat.exists_eq_succ_of_ne_zero (by omega : k ≠ 0)
@@ -196,6 +221,19 @@ private lemma iteratedDeriv_auxK {n : ℕ} (c : ℂ) {k : ℕ} (hk1 : 1 ≤ k) (
     unfold auxK
     exact iteratedDeriv_fun_add hlogAnalytic.contDiffAt (analyticAt_auxQ n c 0).contDiffAt
   rw [hadd, iteratedDeriv_log_one_sub hk1, iteratedDeriv_auxQ c hk1 hkn]
+  ring
+
+private lemma iteratedDeriv_auxK_succ (n : ℕ) (c : ℂ) :
+    iteratedDeriv (n + 1) (auxK n c) 0 = (c - 1) * (Nat.factorial n : ℂ) := by
+  have hlogAnalytic : AnalyticAt ℂ (fun z : ℂ => Complex.log (1 - z)) 0 :=
+    AnalyticAt.clog (by fun_prop) (by simp)
+  have hadd : iteratedDeriv (n + 1) (auxK n c) 0
+      = iteratedDeriv (n + 1) (fun w : ℂ => Complex.log (1 - w)) 0
+        + iteratedDeriv (n + 1) (auxQ n c) 0 := by
+    unfold auxK
+    exact iteratedDeriv_fun_add hlogAnalytic.contDiffAt (analyticAt_auxQ n c 0).contDiffAt
+  rw [hadd, iteratedDeriv_log_one_sub (Nat.succ_le_succ (Nat.zero_le n)), Nat.succ_sub_one,
+    iteratedDeriv_auxQ_succ]
   ring
 
 /-- **Lemma `lem:structure` (ii).** The Taylor coefficients of degree
@@ -258,7 +296,90 @@ theorem taylorCoeff_E_eq_zero {n : ℕ} {c : ℂ} {m : ℕ} (hm1 : 1 ≤ m) (hmn
 of `E_n(·;c)` is `(c-1)/(n+1)`, affine in `c` with slope `1/(n+1)`. -/
 theorem taylorCoeff_E_succ (n : ℕ) (c : ℂ) :
     taylorCoeff (E n c) (n + 1) = (c - 1) / (n + 1) := by
-  sorry
+  have hnbhd : {w : ℂ | w ≠ 1} ∈ 𝓝 (0 : ℂ) :=
+    isOpen_compl_singleton.mem_nhds (by norm_num)
+  have hEK : (E n c) =ᶠ[𝓝 (0 : ℂ)] (fun w => Complex.exp (auxK n c w)) := by
+    filter_upwards [hnbhd] with w hw
+    exact E_eq_exp_auxK hw
+  have hKanalytic : AnalyticAt ℂ (auxK n c) 0 := analyticAt_auxK (by simp)
+  have hK0 : auxK n c 0 = 0 := auxK_zero n c
+  have hKiter : ∀ i < n + 1, iteratedDeriv i (auxK n c) 0 = 0 := by
+    intro i hi
+    rcases Nat.eq_zero_or_pos i with hi0 | hi0
+    · simp [hi0, iteratedDeriv_zero, auxK_zero]
+    · exact iteratedDeriv_auxK c hi0 (by omega)
+  have hKorder : (↑(n + 1) : ℕ∞) ≤ analyticOrderAt (auxK n c) 0 :=
+    (natCast_le_analyticOrderAt_iff_iteratedDeriv_eq_zero hKanalytic).mpr hKiter
+  have hKsucc : iteratedDeriv (n + 1) (auxK n c) 0 = (c - 1) * (Nat.factorial n : ℂ) :=
+    iteratedDeriv_auxK_succ n c
+  -- `g z = exp z - 1 - z` vanishes to order `≥ 2` at `0`.
+  set g : ℂ → ℂ := fun z => Complex.exp z - 1 - z with hg_def
+  have hgAnalytic0 : AnalyticAt ℂ g 0 := by rw [hg_def]; fun_prop
+  have hgiter : ∀ i < 2, iteratedDeriv i g 0 = 0 := by
+    intro i hi
+    interval_cases i
+    · simp [iteratedDeriv_zero, hg_def]
+    · have hderiv : deriv g = fun z => Complex.exp z - 1 := by
+        rw [hg_def]
+        funext z
+        have he : HasDerivAt Complex.exp (Complex.exp z) z := Complex.hasDerivAt_exp z
+        have hc : HasDerivAt (fun _ : ℂ => (1 : ℂ)) (0 : ℂ) z := hasDerivAt_const z 1
+        have hid : HasDerivAt (fun w : ℂ => w) (1 : ℂ) z := hasDerivAt_id z
+        have h1 : HasDerivAt (fun w : ℂ => Complex.exp w - 1 - w) (Complex.exp z - 0 - 1) z :=
+          (he.sub hc).sub hid
+        simp [h1.deriv]
+      rw [show (1 : ℕ) = 0 + 1 from rfl, iteratedDeriv_succ', iteratedDeriv_zero, hderiv]
+      simp
+  have hgorder : (2 : ℕ∞) ≤ analyticOrderAt g 0 :=
+    (natCast_le_analyticOrderAt_iff_iteratedDeriv_eq_zero hgAnalytic0).mpr hgiter
+  have hgAnalytic : AnalyticAt ℂ g (auxK n c 0) := by rw [hK0]; exact hgAnalytic0
+  have hcomp_order : (↑(n + 2) : ℕ∞) ≤ analyticOrderAt (g ∘ auxK n c) 0 := by
+    have hraw := hgAnalytic.analyticOrderAt_comp hKanalytic
+    rw [hK0] at hraw
+    simp only [sub_zero] at hraw
+    rw [hraw]
+    have hmono : (2 : ℕ∞) * (↑(n + 1) : ℕ∞)
+        ≤ analyticOrderAt g 0 * analyticOrderAt (auxK n c) 0 := by
+      gcongr
+    have hcast : (↑(n + 2) : ℕ∞) ≤ (2 : ℕ∞) * (↑(n + 1) : ℕ∞) := by
+      have heq : (2 : ℕ∞) * (↑(n + 1) : ℕ∞) = ↑(2 * (n + 1)) := by norm_cast
+      rw [heq]
+      exact_mod_cast (by omega : n + 2 ≤ 2 * (n + 1))
+    exact hcast.trans hmono
+  have hcompAnalytic : AnalyticAt ℂ (g ∘ auxK n c) 0 := hgAnalytic.comp hKanalytic
+  have hcomp_iter : ∀ i < n + 2, iteratedDeriv i (g ∘ auxK n c) 0 = 0 :=
+    (natCast_le_analyticOrderAt_iff_iteratedDeriv_eq_zero hcompAnalytic).mp hcomp_order
+  have hzero_g : iteratedDeriv (n + 1) (fun w => Complex.exp (auxK n c w) - 1 - auxK n c w) 0 = 0 :=
+    hcomp_iter (n + 1) (by omega)
+  have hexpAnalytic : AnalyticAt ℂ (fun w => Complex.exp (auxK n c w)) 0 := hKanalytic.cexp'
+  have hexpSub1Analytic : AnalyticAt ℂ (fun w => Complex.exp (auxK n c w) - 1) 0 :=
+    hexpAnalytic.sub analyticAt_const
+  have hstep1 : iteratedDeriv (n + 1) (fun w => Complex.exp (auxK n c w) - 1 - auxK n c w) 0
+      = iteratedDeriv (n + 1) (fun w => Complex.exp (auxK n c w) - 1) 0
+        - iteratedDeriv (n + 1) (auxK n c) 0 :=
+    iteratedDeriv_sub hexpSub1Analytic.contDiffAt hKanalytic.contDiffAt
+  have hstep2 : iteratedDeriv (n + 1) (fun w => Complex.exp (auxK n c w) - 1) 0
+      = iteratedDeriv (n + 1) (fun w => Complex.exp (auxK n c w)) 0 := by
+    have hsplit : iteratedDeriv (n + 1) (fun w => Complex.exp (auxK n c w) - 1) 0
+        = iteratedDeriv (n + 1) (fun w => Complex.exp (auxK n c w)) 0
+          - iteratedDeriv (n + 1) (fun _ : ℂ => (1 : ℂ)) 0 :=
+      iteratedDeriv_sub hexpAnalytic.contDiffAt (contDiffAt_const (c := (1 : ℂ)))
+    rw [iteratedDeriv_const, if_neg (Nat.succ_ne_zero n), sub_zero] at hsplit
+    exact hsplit
+  have heq : iteratedDeriv (n + 1) (fun w => Complex.exp (auxK n c w) - 1) 0
+      = iteratedDeriv (n + 1) (auxK n c) 0 := by
+    have h := hzero_g
+    rw [hstep1] at h
+    exact eq_of_sub_eq_zero h
+  have hEsucc : iteratedDeriv (n + 1) (fun w => Complex.exp (auxK n c w)) 0
+      = (c - 1) * (Nat.factorial n : ℂ) := by
+    rw [← hstep2, heq, hKsucc]
+  rw [taylorCoeff, hEK.iteratedDeriv_eq (n + 1), hEsucc]
+  have hn1 : ((n : ℂ) + 1) ≠ 0 := by exact_mod_cast Nat.succ_ne_zero n
+  have hnf : (Nat.factorial n : ℂ) ≠ 0 := by exact_mod_cast Nat.factorial_ne_zero n
+  rw [Nat.factorial_succ]
+  push_cast
+  field_simp
 
 /-- **Lemma `lem:structure` (iv).** `E_n(·;c)` is nowhere vanishing on `𝔻`. -/
 theorem E_ne_zero {n : ℕ} {c w : ℂ} (hw : w ∈ 𝔻) : E n c w ≠ 0 := by
