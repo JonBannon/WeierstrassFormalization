@@ -181,6 +181,91 @@ theorem partialProduct_succ (a c : ℕ → ℂ) (N : ℕ) :
     partialProduct a c (N + 1) = fun z => partialProduct a c N z * E N (c N) (z / a N) := by
   funext z; simp [partialProduct, Finset.prod_range_succ]
 
+/-- Unconditional version of `exists_c_taylorCoeff_mul_E_succ_eq`: the correction constant is
+chosen so that *if* the hypotheses hold, the coefficient is forced to `target`. This lets us
+build the constant by `Classical.choose` before we have separately verified the hypotheses,
+and check the hypotheses afterwards by an ordinary induction. -/
+private theorem exists_c_taylorCoeff_mul_E_succ_eq' (h : ℂ → ℂ) (a : ℂ) (n : ℕ) (target : ℂ) :
+    ∃ c : ℂ, AnalyticAt ℂ h 0 → h 0 = 1 → a ≠ 0 →
+      taylorCoeff (fun z => h z * E n c (z / a)) (n + 1) = target := by
+  by_cases hcond : AnalyticAt ℂ h 0 ∧ h 0 = 1 ∧ a ≠ 0
+  · obtain ⟨hh, hh0, ha⟩ := hcond
+    obtain ⟨c, hc⟩ := exists_c_taylorCoeff_mul_E_succ_eq hh hh0 ha n target
+    exact ⟨c, fun _ _ _ => hc⟩
+  · exact ⟨0, fun hh hh0 ha => absurd ⟨hh, hh0, ha⟩ hcond⟩
+
+/-- The correction constant chosen (via `nearestGaussianInt`-rounding) to force the degree
+`n + 1` Taylor coefficient of `h * E n c (· / a)`, whenever `h` is analytic at `0` with
+`h 0 = 1` and `a ≠ 0`. -/
+private noncomputable def chooseC (h : ℂ → ℂ) (a : ℂ) (n : ℕ) : ℂ :=
+  Classical.choose (exists_c_taylorCoeff_mul_E_succ_eq' h a n
+    (nearestGaussianInt (taylorCoeff h (n + 1))))
+
+private theorem chooseC_spec (h : ℂ → ℂ) (a : ℂ) (n : ℕ)
+    (hh : AnalyticAt ℂ h 0) (hh0 : h 0 = 1) (ha : a ≠ 0) :
+    taylorCoeff (fun z => h z * E n (chooseC h a n) (z / a)) (n + 1)
+      = (nearestGaussianInt (taylorCoeff h (n + 1)) : ℂ) :=
+  Classical.choose_spec (exists_c_taylorCoeff_mul_E_succ_eq' h a n
+    (nearestGaussianInt (taylorCoeff h (n + 1)))) hh hh0 ha
+
+/-- The partial products, built by structural recursion using `chooseC` at each step. Agrees
+with `partialProduct a (fun N => chooseC (auxP a N) (a N) N)` (`auxP_eq_partialProduct`). -/
+private noncomputable def auxP (a : ℕ → ℂ) : ℕ → ℂ → ℂ
+  | 0 => fun _ => 1
+  | (N + 1) => fun z => auxP a N z * E N (chooseC (auxP a N) (a N) N) (z / a N)
+
+private theorem auxP_analyticAt_and_eq_one (a : ℕ → ℂ) (_ha0 : ∀ k, a k ≠ 0) (N : ℕ) :
+    AnalyticAt ℂ (auxP a N) 0 ∧ auxP a N 0 = 1 := by
+  induction N with
+  | zero => exact ⟨by unfold auxP; fun_prop, rfl⟩
+  | succ N ih =>
+      obtain ⟨hAnalytic, hOne⟩ := ih
+      have h1 : AnalyticAt ℂ (fun z : ℂ => z / a N) 0 := by fun_prop
+      have h2 : AnalyticAt ℂ (E N (chooseC (auxP a N) (a N) N)) (0 / a N) := by
+        rw [zero_div]; unfold E; fun_prop
+      refine ⟨?_, ?_⟩
+      · change AnalyticAt ℂ (fun z => auxP a N z * E N (chooseC (auxP a N) (a N) N) (z / a N)) 0
+        exact hAnalytic.mul
+          (AnalyticAt.comp (f := fun z : ℂ => z / a N) (x := 0) h2 h1)
+      · change auxP a N 0 * E N (chooseC (auxP a N) (a N) N) (0 / a N) = 1
+        simp [hOne, E_zero]
+
+private theorem auxP_succ_taylorCoeff (a : ℕ → ℂ) (ha0 : ∀ k, a k ≠ 0) (N : ℕ) :
+    taylorCoeff (auxP a (N + 1)) (N + 1)
+      = (nearestGaussianInt (taylorCoeff (auxP a N) (N + 1)) : ℂ) := by
+  obtain ⟨hAnalytic, hOne⟩ := auxP_analyticAt_and_eq_one a ha0 N
+  exact chooseC_spec (auxP a N) (a N) N hAnalytic hOne (ha0 N)
+
+private theorem chooseC_sub_one_le (a : ℕ → ℂ) (ha0 : ∀ k, a k ≠ 0) (N : ℕ) :
+    ‖chooseC (auxP a N) (a N) N - 1‖ ≤ Real.sqrt 2 / 2 * (N + 1) * ‖a N‖ ^ (N + 1) := by
+  obtain ⟨hAnalytic, hOne⟩ := auxP_analyticAt_and_eq_one a ha0 N
+  set v : ℂ := taylorCoeff (auxP a N) (N + 1) with hv_def
+  set cN : ℂ := chooseC (auxP a N) (a N) N with hcN_def
+  have hsucc : taylorCoeff (fun z => auxP a N z * E N cN (z / a N)) (N + 1)
+      = v + (cN - 1) / ((N + 1) * (a N) ^ (N + 1)) :=
+    taylorCoeff_mul_E_succ (c := cN) hAnalytic hOne (ha0 N) N
+  have hforce : taylorCoeff (fun z => auxP a N z * E N cN (z / a N)) (N + 1)
+      = (nearestGaussianInt v : ℂ) :=
+    chooseC_spec (auxP a N) (a N) N hAnalytic hOne (ha0 N)
+  have heq : (nearestGaussianInt v : ℂ) = v + (cN - 1) / ((N + 1) * (a N) ^ (N + 1)) := by
+    rw [← hforce, hsucc]
+  have hn1 : ((N : ℂ) + 1) ≠ 0 := by exact_mod_cast Nat.succ_ne_zero N
+  have hpow : (a N) ^ (N + 1) ≠ 0 := pow_ne_zero _ (ha0 N)
+  have hcN_eq : cN - 1 = ((nearestGaussianInt v : ℂ) - v) * ((N + 1) * (a N) ^ (N + 1)) := by
+    rw [heq]; field_simp; ring
+  have h1 : ‖(nearestGaussianInt v : ℂ) - v‖ ≤ Real.sqrt 2 / 2 := by
+    rw [show (nearestGaussianInt v : ℂ) - v = -(v - (nearestGaussianInt v : ℂ)) by ring,
+      norm_neg]
+    exact norm_sub_nearestGaussianInt_le v
+  have h2 : ‖((N : ℂ) + 1)‖ = (N : ℝ) + 1 := by
+    rw [show ((N : ℂ) + 1) = ((N + 1 : ℕ) : ℂ) by push_cast; ring, Complex.norm_natCast]
+    push_cast; ring
+  calc ‖cN - 1‖
+      = ‖(nearestGaussianInt v : ℂ) - v‖ * ‖((N : ℂ) + 1)‖ * ‖a N‖ ^ (N + 1) := by
+        rw [hcN_eq, norm_mul, norm_mul, Complex.norm_pow, mul_assoc]
+    _ = ‖(nearestGaussianInt v : ℂ) - v‖ * ((N : ℝ) + 1) * ‖a N‖ ^ (N + 1) := by rw [h2]
+    _ ≤ Real.sqrt 2 / 2 * ((N : ℝ) + 1) * ‖a N‖ ^ (N + 1) := by gcongr
+
 /-- **Inductive coefficient forcing** (Section 3, proof of `prop:Zi`, Step 1's Claim).
 Given points `a : ℕ → ℂ` with `a k ≠ 0`, there is a sequence of correction constants
 `c : ℕ → ℂ` such that, writing `P N := partialProduct a c N`:
@@ -190,18 +275,31 @@ Given points `a : ℕ → ℂ` with `a k ≠ 0`, there is a sequence of correcti
   `taylorCoeff_mul_E_eq_of_le`);
 * the rounding error is controlled: `‖c k - 1‖ ≤ (√2/2) * (k+1) * ‖a k‖ ^ (k+1)`.
 
-Proof sketch: induction on `N`, using `exists_c_taylorCoeff_mul_E_succ_eq` at each step with
-`h := P N`, target `:= (nearestGaussianInt (taylorCoeff (P N) (N+1)) : ℂ)`, to choose `c N`
-forcing `taylorCoeff (P (N+1)) (N+1) = (nearestGaussianInt (taylorCoeff (P N) (N+1)) : ℂ)`;
-then read off the bound on `‖c N - 1‖` from the affine formula in `taylorCoeff_mul_E_succ`
-combined with `norm_sub_nearestGaussianInt_le`. The induction also needs, at each step,
-`AnalyticAt ℂ (P N) 0` and `P N 0 = 1`, both immediate from `E_zero`/`analyticAt_auxQ`-style
-facts about finite products of `E`. -/
+Built above via `auxP`/`chooseC`, a structural recursion combined with the unconditional
+existence lemma `exists_c_taylorCoeff_mul_E_succ_eq'`. -/
 theorem exists_coeffSeq (a : ℕ → ℂ) (ha0 : ∀ k, a k ≠ 0) :
     ∃ c : ℕ → ℂ,
       (∀ N, ∃ z : GaussianInt, taylorCoeff (partialProduct a c N) N = z) ∧
       ∀ k, ‖c k - 1‖ ≤ Real.sqrt 2 / 2 * (k + 1) * ‖a k‖ ^ (k + 1) := by
-  sorry
+  refine ⟨fun N => chooseC (auxP a N) (a N) N, ?_, chooseC_sub_one_le a ha0⟩
+  have hPeq : ∀ N, auxP a N = partialProduct a (fun N => chooseC (auxP a N) (a N) N) N := by
+    intro N
+    induction N with
+    | zero => rw [partialProduct_zero]; rfl
+    | succ N ih =>
+        rw [partialProduct_succ, ← ih]
+        rfl
+  intro N
+  cases N with
+  | zero =>
+      refine ⟨1, ?_⟩
+      rw [← hPeq]
+      change taylorCoeff (fun _ => (1:ℂ)) 0 = ((1 : GaussianInt) : ℂ)
+      simp [taylorCoeff, iteratedDeriv_zero]
+  | succ N =>
+      refine ⟨nearestGaussianInt (taylorCoeff (auxP a N) (N + 1)), ?_⟩
+      rw [← hPeq]
+      exact auxP_succ_taylorCoeff a ha0 N
 
 /-! ## The Weierstrass `M`-test -/
 
