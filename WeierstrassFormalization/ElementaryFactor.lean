@@ -15,6 +15,7 @@ factor `E_n(w; c)` and the structural Lemma `lem:structure`.
 namespace Weierstrass
 
 open Complex
+open scoped Topology
 
 /-- The modified elementary factor of order `n` with parameter `c`,
 \[
@@ -186,11 +187,72 @@ private lemma iteratedDeriv_log_one_sub {k : ℕ} (hk1 : 1 ≤ k) :
       = ((-1 : ℂ) ^ (j + 1) * (-1 : ℂ) ^ j) * (Nat.factorial j : ℂ) := by ring
     _ = -(Nat.factorial j : ℂ) := by rw [hpow]; ring
 
+private lemma iteratedDeriv_auxK {n : ℕ} (c : ℂ) {k : ℕ} (hk1 : 1 ≤ k) (hkn : k ≤ n) :
+    iteratedDeriv k (auxK n c) 0 = 0 := by
+  have hlogAnalytic : AnalyticAt ℂ (fun z : ℂ => Complex.log (1 - z)) 0 :=
+    AnalyticAt.clog (by fun_prop) (by simp)
+  have hadd : iteratedDeriv k (auxK n c) 0
+      = iteratedDeriv k (fun w : ℂ => Complex.log (1 - w)) 0 + iteratedDeriv k (auxQ n c) 0 := by
+    unfold auxK
+    exact iteratedDeriv_fun_add hlogAnalytic.contDiffAt (analyticAt_auxQ n c 0).contDiffAt
+  rw [hadd, iteratedDeriv_log_one_sub hk1, iteratedDeriv_auxQ c hk1 hkn]
+  ring
+
 /-- **Lemma `lem:structure` (ii).** The Taylor coefficients of degree
 `1, …, n` of `E_n(·;c)` vanish, independently of `c`. -/
 theorem taylorCoeff_E_eq_zero {n : ℕ} {c : ℂ} {m : ℕ} (hm1 : 1 ≤ m) (hmn : m ≤ n) :
     taylorCoeff (E n c) m = 0 := by
-  sorry
+  -- `E n c` agrees with `exp ∘ auxK n c` near `0` (away from the pole at `w = 1`).
+  have hnbhd : {w : ℂ | w ≠ 1} ∈ 𝓝 (0 : ℂ) :=
+    isOpen_compl_singleton.mem_nhds (by norm_num)
+  have hEK : (E n c) =ᶠ[𝓝 (0 : ℂ)] (fun w => Complex.exp (auxK n c w)) := by
+    filter_upwards [hnbhd] with w hw
+    exact E_eq_exp_auxK hw
+  have hKanalytic : AnalyticAt ℂ (auxK n c) 0 := analyticAt_auxK (by simp)
+  -- All Taylor coefficients of `auxK n c` of degree `< n + 1` vanish.
+  have hKiter : ∀ i < n + 1, iteratedDeriv i (auxK n c) 0 = 0 := by
+    intro i hi
+    rcases Nat.eq_zero_or_pos i with hi0 | hi0
+    · simp [hi0, iteratedDeriv_zero, auxK_zero]
+    · exact iteratedDeriv_auxK c hi0 (by omega)
+  have hKorder : (↑(n + 1) : ℕ∞) ≤ analyticOrderAt (auxK n c) 0 :=
+    (natCast_le_analyticOrderAt_iff_iteratedDeriv_eq_zero hKanalytic).mpr hKiter
+  -- `exp z - 1` has a simple zero at `0`.
+  set f : ℂ → ℂ := fun z => Complex.exp z - 1 with hf_def
+  have hK0 : auxK n c 0 = 0 := auxK_zero n c
+  have hfAnalytic0 : AnalyticAt ℂ f 0 := by rw [hf_def]; fun_prop
+  have hfAnalytic : AnalyticAt ℂ f (auxK n c 0) := by rw [hK0]; exact hfAnalytic0
+  have hf0 : f 0 = 0 := by simp [hf_def]
+  have hf' : deriv f 0 ≠ 0 := by
+    have : deriv f = fun z => Complex.exp z := by
+      rw [hf_def]
+      funext z
+      simp [(Complex.hasDerivAt_exp z).sub_const 1 |>.deriv]
+    simp [this]
+  have hforder : analyticOrderAt f 0 = 1 :=
+    hfAnalytic0.analyticOrderAt_eq_one_of_zero_deriv_ne_zero hf0 hf'
+  -- Composing, `exp (auxK n c ·) - 1` inherits the high order of vanishing.
+  have hcomp_order : analyticOrderAt (f ∘ auxK n c) 0 = analyticOrderAt (auxK n c) 0 := by
+    have hraw := hfAnalytic.analyticOrderAt_comp hKanalytic
+    rw [hK0] at hraw
+    simp only [sub_zero] at hraw
+    rwa [hforder, one_mul] at hraw
+  have hcompAnalytic : AnalyticAt ℂ (f ∘ auxK n c) 0 := hfAnalytic.comp hKanalytic
+  have hcomp_iter : ∀ i < n + 1, iteratedDeriv i (f ∘ auxK n c) 0 = 0 :=
+    (natCast_le_analyticOrderAt_iff_iteratedDeriv_eq_zero hcompAnalytic).mp
+      (hcomp_order ▸ hKorder)
+  have hm_lt : m < n + 1 := by omega
+  have hzero1 : iteratedDeriv m (fun w => Complex.exp (auxK n c w) - 1) 0 = 0 :=
+    hcomp_iter m hm_lt
+  have hexpAnalytic : AnalyticAt ℂ (fun w => Complex.exp (auxK n c w)) 0 := hKanalytic.cexp'
+  have hzero2 : iteratedDeriv m (fun w => Complex.exp (auxK n c w)) 0 = 0 := by
+    have hsplit := iteratedDeriv_sub (n := m) (x := (0 : ℂ))
+      hexpAnalytic.contDiffAt (contDiffAt_const (c := (1 : ℂ)))
+    simp only [iteratedDeriv_const, if_neg (by omega : ¬ m = 0)] at hsplit
+    rw [sub_zero] at hsplit
+    rwa [← hsplit]
+  rw [taylorCoeff, hEK.iteratedDeriv_eq m, hzero2]
+  simp
 
 /-- **Lemma `lem:structure` (iii).** The Taylor coefficient of degree `n+1`
 of `E_n(·;c)` is `(c-1)/(n+1)`, affine in `c` with slope `1/(n+1)`. -/
