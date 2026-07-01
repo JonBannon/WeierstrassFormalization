@@ -63,7 +63,7 @@ divisor on `𝔻` is the zero divisor of a holomorphic function on `𝔻` with
 Taylor coefficients in `ℤ[i]`. -/
 theorem exists_holomorphic_gaussianInt_coeffs_of_effectiveDivisor (D : EffectiveDivisor) :
     ∃ f : ℂ → ℂ, HolomorphicOn f ∧ IsZeroDivisorOf D f ∧ HasGaussianIntCoeffs f := by
-  obtain ⟨a, ha0, hamult, hesc⟩ := exists_enum_of_effectiveDivisor D
+  obtain ⟨a, ha0, hamult, hesc, _⟩ := exists_enum_of_effectiveDivisor D
   obtain ⟨c, hcforce, hcbound⟩ := exists_coeffSeq a ha0
   have hM := exists_Mtest_of_coeffSeq a c ha0 hesc hcbound
   set d : ℕ := D.mult 0 with hd_def
@@ -81,7 +81,7 @@ theorem exists_holomorphic_gaussianInt_coeffs_of_effectiveDivisor (D : Effective
     obtain ⟨zp, hzp⟩ := hcforce p
     refine ⟨zp, ?_⟩
     have hstep1 : taylorCoeff g p = taylorCoeff (partialProduct a c (p + 1 + 1)) p :=
-      taylorCoeff_tprod_factors_eq_partial (n := id) strictMono_id hM p (p + 1)
+      taylorCoeff_tprod_factors_eq_partial (n := id) monotone_id hM p (p + 1)
         (show p < p + 1 by omega)
     have hshrink : ∀ N, p ≤ N →
         taylorCoeff (partialProduct a c (N + 1)) p = taylorCoeff (partialProduct a c N) p := by

@@ -188,7 +188,8 @@ private theorem support_countable (D : EffectiveDivisor) : (D.support \ {0}).Cou
 theorem exists_enum_of_effectiveDivisor (D : EffectiveDivisor) :
     ∃ a : ℕ → ℂ, (∀ k, a k ≠ 0) ∧
       (∀ z ≠ 0, D.mult z = {k | a k = z}.ncard) ∧
-      ∀ s : ℝ, s < 1 → {k | ‖a k‖ < s}.Finite := by
+      (∀ s : ℝ, s < 1 → {k | ‖a k‖ < s}.Finite) ∧
+      ∀ k, a k = 2 ∨ a k ∈ D.support := by
   classical
   set S : Set ℂ := D.support \ {0} with hS_def
   have hScount : S.Countable := support_countable D
@@ -218,7 +219,7 @@ theorem exists_enum_of_effectiveDivisor (D : EffectiveDivisor) :
     simp only [ha_def, dif_neg h]
   have haS : ∀ k (h : ∃ σ : ZigmaT, ι σ = k), a k ∈ S := by
     intro k h; rw [ha_of_ex h]; exact (Classical.choose h).1.2
-  refine ⟨a, ?_, ?_, ?_⟩
+  refine ⟨a, ?_, ?_, ?_, ?_⟩
   · -- `a k ≠ 0`
     intro k
     by_cases h : ∃ σ : ZigmaT, ι σ = k
@@ -376,6 +377,11 @@ theorem exists_enum_of_effectiveDivisor (D : EffectiveDivisor) :
         exact ⟨(haS k hak_mem).1, le_of_lt hk⟩
       exact Set.mem_iUnion₂.mpr ⟨a k, hakT, rfl⟩
     exact Set.Finite.subset (Set.Finite.biUnion hTfin hfiber_fin) hsub
+  · -- `a k` is either the dummy padding point or a genuine point of `D`'s support
+    intro k
+    by_cases h : ∃ σ : ZigmaT, ι σ = k
+    · exact Or.inr (haS k h).1
+    · exact Or.inl (ha_of_not_ex h)
 
 /-! ## The partial products and the inductive rounding step -/
 
@@ -949,7 +955,7 @@ Proof sketch: write the infinite product as the `(k+1)`-st partial product times
 value-`1` part holds since every tail factor is `1` at `0` (`E_zero`) and the tail converges
 locally uniformly (by the same `M`-test argument, reindexed), and analyticity follows as in
 `holomorphicOn_tprod_factors`. -/
-theorem taylorCoeff_tprod_factors_eq_partial (hnmono : StrictMono n)
+theorem taylorCoeff_tprod_factors_eq_partial (hnmono : Monotone n)
     (hM : ∀ K ⊆ 𝔻, IsCompact K → ∃ u : ℕ → ℝ, Summable u ∧
       ∀ k, ∀ z ∈ K, ‖E (n k) (c k) (z / a k) - 1‖ ≤ u k)
     (m k : ℕ) (hk : m < n k) :
@@ -971,7 +977,7 @@ theorem taylorCoeff_tprod_factors_eq_partial (hnmono : StrictMono n)
             unfold E; fun_prop
           exact this.analyticAt 0
         have hmnK : m ≤ n K := by
-          have hlt : n k < n K := hnmono (by omega)
+          have hle : n k ≤ n K := hnmono (by omega)
           omega
         have hfun_eq : (fun z => ∏ j ∈ Finset.range (K + 1), E (n j) (c j) (z / a j))
             = fun z => (∏ j ∈ Finset.range K, E (n j) (c j) (z / a j)) * E (n K) (c K) (z / a K) :=
