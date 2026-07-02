@@ -625,6 +625,7 @@ theorem exists_hasGaussianIntCoeffs_mul_nowhereVanishing (f : ℂ → ℂ) (hf :
 multiplication by any element of `𝒪(𝔻)`, and depending only on behavior on `𝔻` (since elements
 of `𝒪(𝔻)` are functions on `𝔻`, represented here by arbitrary total extensions to `ℂ`). -/
 structure IsIdealOD (I : Set (ℂ → ℂ)) : Prop where
+  zero_mem : (fun _ : ℂ => (0 : ℂ)) ∈ I
   subset_holomorphic : ∀ f ∈ I, HolomorphicOn f
   add_mem : ∀ f ∈ I, ∀ g ∈ I, (fun z => f z + g z) ∈ I
   smul_mem : ∀ h, HolomorphicOn h → ∀ f ∈ I, (fun z => h z * f z) ∈ I
@@ -747,6 +748,7 @@ theorem exists_holomorphic_eq_id_mul_of_eval_zero {f : ℂ → ℂ} (hf : Holomo
     exact this.symm
 
 theorem isIdealOD_evalZeroIdeal : IsIdealOD evalZeroIdeal where
+  zero_mem := ⟨fun _ _ => analyticAt_const, rfl⟩
   subset_holomorphic := fun f hf => hf.1
   add_mem := fun f hf g hg => ⟨fun z hz => (hf.1 z hz).add (hg.1 z hz), by
     change f 0 + g 0 = 0; rw [hf.2, hg.2]; ring⟩
@@ -846,5 +848,265 @@ theorem contraction_eq_augmentationIdeal_of_superset {m : Set (ℂ → ℂ)} (hm
   rcases isMaximalIdealOD_evalZeroIdeal.maximal m hm.isIdeal hevalZero_sub_m with heq | htop
   · rw [heq, contraction_evalZeroIdeal_eq_augmentationIdeal]
   · exact absurd htop hm.proper
+
+/-! ## Proposition `prop:fiber`, second part: primes of `ℛ` containing `𝔫₀`
+biject with `Spec(ℤ[i])` -/
+
+/-- An ideal of `ℛ = ℤ[i][[z]] ∩ 𝒪(𝔻)`. -/
+structure IsIdealOfGaussianIntRing (I : Set (ℂ → ℂ)) : Prop where
+  zero_mem : (fun _ : ℂ => (0 : ℂ)) ∈ I
+  subset_R : ∀ f ∈ I, HolomorphicOn f ∧ HasGaussianIntCoeffs f
+  add_mem : ∀ f ∈ I, ∀ g ∈ I, (fun z => f z + g z) ∈ I
+  smul_mem : ∀ h, HolomorphicOn h → HasGaussianIntCoeffs h → ∀ f ∈ I, (fun z => h z * f z) ∈ I
+  congr_on_𝔻 : ∀ f ∈ I, ∀ f', HolomorphicOn f' → HasGaussianIntCoeffs f' →
+    Set.EqOn f f' 𝔻 → f' ∈ I
+
+/-- A prime ideal of `ℛ`. -/
+structure IsPrimeIdealOfGaussianIntRing (p : Set (ℂ → ℂ)) : Prop where
+  isIdeal : IsIdealOfGaussianIntRing p
+  ne_top : p ≠ {f | HolomorphicOn f ∧ HasGaussianIntCoeffs f}
+  mem_or_mem : ∀ f, HolomorphicOn f → HasGaussianIntCoeffs f → ∀ g, HolomorphicOn g →
+    HasGaussianIntCoeffs g → (fun z => f z * g z) ∈ p → f ∈ p ∨ g ∈ p
+
+theorem isIdealOfGaussianIntRing_augmentationIdeal :
+    IsIdealOfGaussianIntRing augmentationIdeal where
+  zero_mem := ⟨fun _ _ => analyticAt_const, hasGaussianIntCoeffs_zero, rfl⟩
+  subset_R := fun f hf => ⟨hf.1, hf.2.1⟩
+  add_mem := fun f hf g hg =>
+    ⟨fun z hz => (hf.1 z hz).add (hg.1 z hz),
+      hasGaussianIntCoeffs_add hf.1 hg.1 hf.2.1 hg.2.1, by
+      change f 0 + g 0 = 0; rw [hf.2.2, hg.2.2]; ring⟩
+  smul_mem := fun h hh_holo hh_int f hf =>
+    ⟨fun z hz => (hh_holo z hz).mul (hf.1 z hz),
+      hasGaussianIntCoeffs_mul hh_holo hf.1 hh_int hf.2.1, by
+      change h 0 * f 0 = 0; rw [hf.2.2]; ring⟩
+  congr_on_𝔻 := fun f hf f' hf'_holo hf'_int heq =>
+    ⟨hf'_holo, hf'_int, by rw [← heq zero_mem_𝔻]; exact hf.2.2⟩
+
+theorem isPrimeIdealOfGaussianIntRing_augmentationIdeal :
+    IsPrimeIdealOfGaussianIntRing augmentationIdeal where
+  isIdeal := isIdealOfGaussianIntRing_augmentationIdeal
+  ne_top := by
+    intro hcontra
+    have h1 : (fun _ : ℂ => (1 : ℂ)) ∈ augmentationIdeal := by
+      rw [hcontra]; exact ⟨fun _ _ => analyticAt_const, hasGaussianIntCoeffs_one⟩
+    exact one_ne_zero h1.2.2
+  mem_or_mem := fun f hf_holo hf_int g hg_holo hg_int hfg => by
+    have h0 : f 0 * g 0 = 0 := hfg.2.2
+    rcases mul_eq_zero.mp h0 with h | h
+    · exact Or.inl ⟨hf_holo, hf_int, h⟩
+    · exact Or.inr ⟨hg_holo, hg_int, h⟩
+
+/-- The evaluation-at-`0` map from `ℛ` to `ℤ[i]`: the unique Gaussian integer equal to `f(0)` for
+`f` with Gaussian-integer Taylor coefficients (junk-valued `0` otherwise). -/
+noncomputable def ev0 (f : ℂ → ℂ) : GaussianInt :=
+  @dite GaussianInt (HasGaussianIntCoeffs f) (Classical.propDecidable _)
+    (fun h => Classical.choose (h 0)) (fun _ => 0)
+
+theorem ev0_eq {f : ℂ → ℂ} (hf : HasGaussianIntCoeffs f) : (ev0 f : ℂ) = f 0 := by
+  have hdite : ev0 f = Classical.choose (hf 0) := dif_pos hf
+  rw [hdite, ← taylorCoeff_zero_eq f]
+  exact (Classical.choose_spec (hf 0)).symm
+
+theorem ev0_of_hasGaussianIntCoeffs_eq {f : ℂ → ℂ} (hf : HasGaussianIntCoeffs f) {z : GaussianInt}
+    (heq : f 0 = (z : ℂ)) : ev0 f = z :=
+  GaussianInt.toComplex_inj.mp (by rw [ev0_eq hf, heq])
+
+theorem ev0_add {f g : ℂ → ℂ} (hf_holo : HolomorphicOn f) (hg_holo : HolomorphicOn g)
+    (hf_int : HasGaussianIntCoeffs f) (hg_int : HasGaussianIntCoeffs g) :
+    ev0 (fun z => f z + g z) = ev0 f + ev0 g := by
+  apply GaussianInt.toComplex_inj.mp
+  rw [ev0_eq (hasGaussianIntCoeffs_add hf_holo hg_holo hf_int hg_int), GaussianInt.toComplex_add,
+    ev0_eq hf_int, ev0_eq hg_int]
+
+theorem ev0_mul {f g : ℂ → ℂ} (hf_holo : HolomorphicOn f) (hg_holo : HolomorphicOn g)
+    (hf_int : HasGaussianIntCoeffs f) (hg_int : HasGaussianIntCoeffs g) :
+    ev0 (fun z => f z * g z) = ev0 f * ev0 g := by
+  apply GaussianInt.toComplex_inj.mp
+  rw [ev0_eq (hasGaussianIntCoeffs_mul hf_holo hg_holo hf_int hg_int), GaussianInt.toComplex_mul,
+    ev0_eq hf_int, ev0_eq hg_int]
+
+/-- The **pullback** of an ideal `q` of `ℤ[i]` along `ev₀`: `{f ∈ ℛ : ev₀(f) ∈ q}`. -/
+def pullbackIdeal (q : Ideal GaussianInt) : Set (ℂ → ℂ) :=
+  {f | HolomorphicOn f ∧ HasGaussianIntCoeffs f ∧ ev0 f ∈ q}
+
+theorem augmentationIdeal_subset_pullbackIdeal (q : Ideal GaussianInt) :
+    augmentationIdeal ⊆ pullbackIdeal q := by
+  rintro f ⟨hf_holo, hf_int, hf0⟩
+  refine ⟨hf_holo, hf_int, ?_⟩
+  rw [ev0_of_hasGaussianIntCoeffs_eq hf_int (by rw [hf0, GaussianInt.toComplex_zero])]
+  exact q.zero_mem
+
+theorem isIdealOfGaussianIntRing_pullbackIdeal (q : Ideal GaussianInt) :
+    IsIdealOfGaussianIntRing (pullbackIdeal q) where
+  zero_mem := augmentationIdeal_subset_pullbackIdeal q
+    ⟨fun _ _ => analyticAt_const, hasGaussianIntCoeffs_zero, rfl⟩
+  subset_R := fun f hf => ⟨hf.1, hf.2.1⟩
+  add_mem := fun f hf g hg =>
+    ⟨fun z hz => (hf.1 z hz).add (hg.1 z hz),
+      hasGaussianIntCoeffs_add hf.1 hg.1 hf.2.1 hg.2.1, by
+      rw [ev0_add hf.1 hg.1 hf.2.1 hg.2.1]
+      exact q.add_mem hf.2.2 hg.2.2⟩
+  smul_mem := fun h hh_holo hh_int f hf =>
+    ⟨fun z hz => (hh_holo z hz).mul (hf.1 z hz),
+      hasGaussianIntCoeffs_mul hh_holo hf.1 hh_int hf.2.1, by
+      rw [ev0_mul hh_holo hf.1 hh_int hf.2.1]
+      exact q.mul_mem_left _ hf.2.2⟩
+  congr_on_𝔻 := fun f hf f' hf'_holo hf'_int heq => by
+    refine ⟨hf'_holo, hf'_int, ?_⟩
+    have heval : ev0 f' = ev0 f :=
+      ev0_of_hasGaussianIntCoeffs_eq hf'_int (by rw [← heq zero_mem_𝔻, ev0_eq hf.2.1])
+    rw [heval]; exact hf.2.2
+
+theorem isPrimeIdealOfGaussianIntRing_pullbackIdeal {q : Ideal GaussianInt} (hq : q.IsPrime) :
+    IsPrimeIdealOfGaussianIntRing (pullbackIdeal q) where
+  isIdeal := isIdealOfGaussianIntRing_pullbackIdeal q
+  ne_top := by
+    intro hcontra
+    obtain ⟨c, hc⟩ := SetLike.exists_of_lt (lt_top_iff_ne_top.mpr hq.ne_top)
+    have hmem : (fun _ : ℂ => (c : ℂ)) ∈ pullbackIdeal q := by
+      rw [hcontra]; exact ⟨fun _ _ => analyticAt_const, hasGaussianIntCoeffs_const c⟩
+    apply hc.2
+    have := hmem.2.2
+    rwa [ev0_of_hasGaussianIntCoeffs_eq (hasGaussianIntCoeffs_const c) rfl] at this
+  mem_or_mem := fun f hf_holo hf_int g hg_holo hg_int hfg => by
+    have hmem : ev0 (fun z => f z * g z) ∈ q := hfg.2.2
+    rw [ev0_mul hf_holo hg_holo hf_int hg_int] at hmem
+    rcases hq.mem_or_mem hmem with h | h
+    · exact Or.inl ⟨hf_holo, hf_int, h⟩
+    · exact Or.inr ⟨hg_holo, hg_int, h⟩
+
+/-- The **pushforward** (image) of an ideal `p` of `ℛ` under `ev₀`. -/
+noncomputable def pushforwardIdeal (p : Set (ℂ → ℂ)) (hp : IsIdealOfGaussianIntRing p) :
+    Ideal GaussianInt where
+  carrier := {z : GaussianInt | ∃ f, HolomorphicOn f ∧ HasGaussianIntCoeffs f ∧ f ∈ p ∧ ev0 f = z}
+  zero_mem' := ⟨fun _ => 0, fun _ _ => analyticAt_const, hasGaussianIntCoeffs_zero, hp.zero_mem,
+    ev0_of_hasGaussianIntCoeffs_eq hasGaussianIntCoeffs_zero
+      (by rw [GaussianInt.toComplex_zero])⟩
+  add_mem' := by
+    rintro x y ⟨f, hf_holo, hf_int, hfp, hfev⟩ ⟨g, hg_holo, hg_int, hgp, hgev⟩
+    refine ⟨fun z => f z + g z, fun z hz => (hf_holo z hz).add (hg_holo z hz),
+      hasGaussianIntCoeffs_add hf_holo hg_holo hf_int hg_int, hp.add_mem f hfp g hgp, ?_⟩
+    rw [ev0_add hf_holo hg_holo hf_int hg_int, hfev, hgev]
+  smul_mem' := by
+    rintro c x ⟨f, hf_holo, hf_int, hfp, hfev⟩
+    obtain ⟨g, hg_holo, hg_int, hgeq⟩ := exists_holomorphic_gaussianIntCoeffs_eval_eq c
+    have hgev : ev0 g = c := ev0_of_hasGaussianIntCoeffs_eq hg_int hgeq
+    refine ⟨fun z => g z * f z, fun z hz => (hg_holo z hz).mul (hf_holo z hz),
+      hasGaussianIntCoeffs_mul hg_holo hf_holo hg_int hf_int,
+      hp.smul_mem g hg_holo hg_int f hfp, ?_⟩
+    change ev0 (fun z => g z * f z) = c • x
+    rw [ev0_mul hg_holo hf_holo hg_int hf_int, hgev, hfev, smul_eq_mul]
+
+/-- Two `ℛ`-elements with the same value of `ev₀` differ by an element of the augmentation
+ideal `𝔫₀`. -/
+theorem sub_mem_augmentationIdeal_of_ev0_eq {f g : ℂ → ℂ} (hf_holo : HolomorphicOn f)
+    (hg_holo : HolomorphicOn g) (hf_int : HasGaussianIntCoeffs f) (hg_int : HasGaussianIntCoeffs g)
+    (heval : ev0 f = ev0 g) : (fun z => f z + (-1 : ℂ) * g z) ∈ augmentationIdeal := by
+  have hc_holo : HolomorphicOn (fun _ : ℂ => (-1 : ℂ)) := fun _ _ => analyticAt_const
+  have hc_int : HasGaussianIntCoeffs (fun _ : ℂ => (-1 : ℂ)) := by
+    simpa using hasGaussianIntCoeffs_const (-1)
+  refine ⟨fun z hz => (hf_holo z hz).add ((hc_holo z hz).mul (hg_holo z hz)),
+    hasGaussianIntCoeffs_add hf_holo (fun z hz => (hc_holo z hz).mul (hg_holo z hz)) hf_int
+      (hasGaussianIntCoeffs_mul hc_holo hg_holo hc_int hg_int), ?_⟩
+  change f 0 + (-1 : ℂ) * g 0 = 0
+  have h1 := ev0_eq hf_int
+  have h2 := ev0_eq hg_int
+  rw [heval] at h1
+  rw [← h1, ← h2]; ring
+
+theorem isPrimeIdealOfGaussianIntRing_pushforwardIdeal {p : Set (ℂ → ℂ)}
+    (hp : IsPrimeIdealOfGaussianIntRing p) (haug : augmentationIdeal ⊆ p) :
+    (pushforwardIdeal p hp.isIdeal).IsPrime where
+  ne_top' := by
+    intro htop
+    have h1mem : (1 : GaussianInt) ∈ pushforwardIdeal p hp.isIdeal := htop ▸ Submodule.mem_top
+    obtain ⟨f1, hf1_holo, hf1_int, hf1p, hf1ev⟩ := h1mem
+    apply hp.ne_top
+    ext g
+    simp only [Set.mem_setOf_eq]
+    constructor
+    · exact fun _ => hp.isIdeal.subset_R g (by assumption)
+    · rintro ⟨hg_holo, hg_int⟩
+      have hgc_holo : HolomorphicOn (fun _ : ℂ => g 0) := fun _ _ => analyticAt_const
+      have hgc_int : HasGaussianIntCoeffs (fun _ : ℂ => g 0) := by
+        rw [← ev0_eq hg_int]; exact hasGaussianIntCoeffs_const (ev0 g)
+      have hprod_mem : (fun z => g 0 * f1 z) ∈ p := hp.isIdeal.smul_mem _ hgc_holo hgc_int f1 hf1p
+      have hev_eq : ev0 (fun z => g 0 * f1 z) = ev0 g := by
+        rw [ev0_mul hgc_holo hf1_holo hgc_int hf1_int, hf1ev, mul_one]
+        exact ev0_of_hasGaussianIntCoeffs_eq hgc_int (ev0_eq hg_int).symm
+      have hdiff_mem : (fun z => g z + (-1 : ℂ) * (g 0 * f1 z)) ∈ augmentationIdeal :=
+        sub_mem_augmentationIdeal_of_ev0_eq hg_holo (hgc_holo.mul hf1_holo) hg_int
+          (hasGaussianIntCoeffs_mul hgc_holo hf1_holo hgc_int hf1_int) hev_eq.symm
+      have hdiff_p : (fun z => g z + (-1 : ℂ) * (g 0 * f1 z)) ∈ p := haug hdiff_mem
+      have hg_eq : g = fun z => (g z + (-1 : ℂ) * (g 0 * f1 z)) + g 0 * f1 z := by
+        funext z; ring
+      rw [hg_eq]
+      exact hp.isIdeal.add_mem _ hdiff_p _ hprod_mem
+  mem_or_mem' := by
+    rintro x y ⟨h, hh_holo, hh_int, hhp, hhev⟩
+    obtain ⟨f, hf_holo, hf_int, hfeq⟩ := exists_holomorphic_gaussianIntCoeffs_eval_eq x
+    obtain ⟨g, hg_holo, hg_int, hgeq⟩ := exists_holomorphic_gaussianIntCoeffs_eval_eq y
+    have hfev : ev0 f = x := ev0_of_hasGaussianIntCoeffs_eq hf_int hfeq
+    have hgev : ev0 g = y := ev0_of_hasGaussianIntCoeffs_eq hg_int hgeq
+    have hprodev : ev0 (fun z => f z * g z) = ev0 h := by
+      rw [ev0_mul hf_holo hg_holo hf_int hg_int, hfev, hgev, hhev]
+    have hdiff_mem : (fun z => (fun w => f w * g w) z + (-1 : ℂ) * h z) ∈ augmentationIdeal :=
+      sub_mem_augmentationIdeal_of_ev0_eq (hf_holo.mul hg_holo) hh_holo
+        (hasGaussianIntCoeffs_mul hf_holo hg_holo hf_int hg_int) hh_int hprodev
+    have hdiff_p : (fun z => f z * g z + (-1 : ℂ) * h z) ∈ p := haug hdiff_mem
+    have hprod_eq : (fun z => f z * g z) = fun z => (f z * g z + (-1 : ℂ) * h z) + h z := by
+      funext z; ring
+    have hprod_p : (fun z => f z * g z) ∈ p := by
+      rw [hprod_eq]; exact hp.isIdeal.add_mem _ hdiff_p _ hhp
+    rcases hp.mem_or_mem f hf_holo hf_int g hg_holo hg_int hprod_p with hfp | hgp
+    · exact Or.inl ⟨f, hf_holo, hf_int, hfp, hfev⟩
+    · exact Or.inr ⟨g, hg_holo, hg_int, hgp, hgev⟩
+
+theorem pushforward_pullback (q : Ideal GaussianInt) :
+    pushforwardIdeal (pullbackIdeal q) (isIdealOfGaussianIntRing_pullbackIdeal q) = q := by
+  ext z
+  constructor
+  · rintro ⟨f, -, -, ⟨-, -, hfq⟩, hfev⟩
+    rw [← hfev]; exact hfq
+  · intro hz
+    obtain ⟨f, hf_holo, hf_int, hfeq⟩ := exists_holomorphic_gaussianIntCoeffs_eval_eq z
+    have hfev : ev0 f = z := ev0_of_hasGaussianIntCoeffs_eq hf_int hfeq
+    refine ⟨f, hf_holo, hf_int, ⟨hf_holo, hf_int, ?_⟩, hfev⟩
+    rw [hfev]; exact hz
+
+theorem pullback_pushforward {p : Set (ℂ → ℂ)} (hp : IsPrimeIdealOfGaussianIntRing p)
+    (haug : augmentationIdeal ⊆ p) :
+    pullbackIdeal (pushforwardIdeal p hp.isIdeal) = p := by
+  ext f
+  constructor
+  · rintro ⟨hf_holo, hf_int, h, hh_holo, hh_int, hhp, hhev⟩
+    have hd_mem_aug : (fun z => h z + (-1 : ℂ) * f z) ∈ augmentationIdeal :=
+      sub_mem_augmentationIdeal_of_ev0_eq hh_holo hf_holo hh_int hf_int hhev
+    have hd_p : (fun z => h z + (-1 : ℂ) * f z) ∈ p := haug hd_mem_aug
+    have hc_holo : HolomorphicOn (fun _ : ℂ => (-1 : ℂ)) := fun _ _ => analyticAt_const
+    have hc_int : HasGaussianIntCoeffs (fun _ : ℂ => (-1 : ℂ)) := by
+      simpa using hasGaussianIntCoeffs_const (-1)
+    have hnegd_p : (fun z => (-1 : ℂ) * (h z + (-1 : ℂ) * f z)) ∈ p :=
+      hp.isIdeal.smul_mem _ hc_holo hc_int _ hd_p
+    have hf_eq : f = fun z => h z + (-1 : ℂ) * (h z + (-1 : ℂ) * f z) := by funext z; ring
+    rw [hf_eq]
+    exact hp.isIdeal.add_mem h hhp _ hnegd_p
+  · intro hfp
+    obtain ⟨hf_holo, hf_int⟩ := hp.isIdeal.subset_R f hfp
+    exact ⟨hf_holo, hf_int, f, hf_holo, hf_int, hfp, rfl⟩
+
+/-- **Proposition `prop:fiber`, second part.** The primes of `ℛ` containing the augmentation
+ideal `𝔫₀` biject with `Spec(ℤ[i])`, via contraction/pullback along `ev₀ : ℛ → ℤ[i]`. -/
+noncomputable def primeIdealCorrespondence :
+    {p : Set (ℂ → ℂ) // IsPrimeIdealOfGaussianIntRing p ∧ augmentationIdeal ⊆ p} ≃
+      PrimeSpectrum GaussianInt where
+  toFun := fun ⟨p, hp, haug⟩ =>
+    ⟨pushforwardIdeal p hp.isIdeal, isPrimeIdealOfGaussianIntRing_pushforwardIdeal hp haug⟩
+  invFun := fun q => ⟨pullbackIdeal q.asIdeal,
+    isPrimeIdealOfGaussianIntRing_pullbackIdeal q.isPrime,
+    augmentationIdeal_subset_pullbackIdeal q.asIdeal⟩
+  left_inv := fun ⟨_, hp, haug⟩ => Subtype.ext (pullback_pushforward hp haug)
+  right_inv := fun q => PrimeSpectrum.ext (pushforward_pullback q.asIdeal)
 
 end Weierstrass
