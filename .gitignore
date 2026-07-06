@@ -1,1 +1,10 @@
 /.lake
+
+# LaTeX build outputs for the paper
+/integer_weierstrass_18.aux
+/integer_weierstrass_18.log
+/integer_weierstrass_18.out
+/integer_weierstrass_18.pdf
+/integer_weierstrass_18.fdb_latexmk
+/integer_weierstrass_18.fls
+/integer_weierstrass_18.synctex.gz

@@ -1,0 +1,1112 @@
+/-
+Copyright (c) 2026 Jon Bannon, David Feldman. All rights reserved.
+Released under Apache 2.0 license as described in the file LICENSE.
+Authors: Jon Bannon, David Feldman
+-/
+import WeierstrassFormalization.GaussianRealization
+import WeierstrassFormalization.MainTheorem
+
+/-!
+# Ring-theoretic consequences
+
+Formalizes Section `sec:algebra`: the subrings `𝓞(𝔻)`, `ℛ = ℤ[i][[z]] ∩ 𝓞(𝔻)`, and
+`ℛ_ℝ = ℤ[[z]] ∩ 𝓞(𝔻)` of holomorphic functions on `𝔻`, and the propositions and
+corollary describing their unit groups, factorization, and the contraction map
+`MaxSpec(𝓞(𝔻)) → Spec(ℛ)`.
+-/
+
+namespace Weierstrass
+
+open Complex Filter Topology
+
+/-! ## Taylor coefficients of a sum and a product -/
+
+/-- The Taylor coefficients of a sum are the sum of the Taylor coefficients. -/
+theorem taylorCoeff_add {f g : ℂ → ℂ} (hf : AnalyticAt ℂ f 0) (hg : AnalyticAt ℂ g 0) (n : ℕ) :
+    taylorCoeff (fun z => f z + g z) n = taylorCoeff f n + taylorCoeff g n := by
+  have hf' : ContDiffAt ℂ (n : ℕ) f 0 := hf.contDiffAt.of_le le_top
+  have hg' : ContDiffAt ℂ (n : ℕ) g 0 := hg.contDiffAt.of_le le_top
+  unfold taylorCoeff
+  rw [iteratedDeriv_fun_add hf' hg', add_div]
+
+/-- The Taylor coefficients of a negation are the negation of the Taylor coefficients. -/
+theorem taylorCoeff_neg (f : ℂ → ℂ) (n : ℕ) :
+    taylorCoeff (fun z => -f z) n = -taylorCoeff f n := by
+  unfold taylorCoeff
+  rw [iteratedDeriv_fun_neg n f 0, neg_div]
+
+/-- **Cauchy product for Taylor coefficients.** The `n`-th Taylor coefficient of a product
+`f · g` is the discrete convolution of the Taylor coefficients of `f` and `g`. -/
+theorem taylorCoeff_mul {f g : ℂ → ℂ} (hf : AnalyticAt ℂ f 0) (hg : AnalyticAt ℂ g 0) (n : ℕ) :
+    taylorCoeff (fun z => f z * g z) n
+      = ∑ i ∈ Finset.range (n + 1), taylorCoeff f i * taylorCoeff g (n - i) := by
+  have hf' : ContDiffAt ℂ (n : ℕ) f 0 := hf.contDiffAt.of_le le_top
+  have hg' : ContDiffAt ℂ (n : ℕ) g 0 := hg.contDiffAt.of_le le_top
+  have hsum := iteratedDeriv_fun_mul hf' hg'
+  have hfactorial_ne_zero : ∀ j : ℕ, (Nat.factorial j : ℂ) ≠ 0 := fun j => by
+    exact_mod_cast Nat.factorial_ne_zero j
+  have hterm : ∀ i ∈ Finset.range (n + 1),
+      (n.choose i : ℂ) * iteratedDeriv i f 0 * iteratedDeriv (n - i) g 0
+        = (taylorCoeff f i * taylorCoeff g (n - i)) * (Nat.factorial n : ℂ) := by
+    intro i hi
+    have hin : i ≤ n := Nat.lt_succ_iff.mp (Finset.mem_range.mp hi)
+    have hfact : (n.choose i : ℂ) * (Nat.factorial i : ℂ) * (Nat.factorial (n - i) : ℂ)
+        = (Nat.factorial n : ℂ) := by exact_mod_cast Nat.choose_mul_factorial_mul_factorial hin
+    have hderiv_f : iteratedDeriv i f 0 = taylorCoeff f i * (Nat.factorial i : ℂ) := by
+      unfold taylorCoeff; rw [div_mul_cancel₀ _ (hfactorial_ne_zero i)]
+    have hderiv_g : iteratedDeriv (n - i) g 0
+        = taylorCoeff g (n - i) * (Nat.factorial (n - i) : ℂ) := by
+      unfold taylorCoeff; rw [div_mul_cancel₀ _ (hfactorial_ne_zero (n - i))]
+    rw [hderiv_f, hderiv_g, ← hfact]; ring
+  rw [Finset.sum_congr rfl hterm, ← Finset.sum_mul] at hsum
+  change iteratedDeriv n (fun z => f z * g z) 0 / (Nat.factorial n : ℂ)
+      = ∑ i ∈ Finset.range (n + 1), taylorCoeff f i * taylorCoeff g (n - i)
+  rw [hsum, mul_div_cancel_right₀ _ (hfactorial_ne_zero n)]
+
+/-- `0 ∈ 𝔻`, used repeatedly to extract `AnalyticAt ℂ f 0` from `HolomorphicOn f`. -/
+theorem zero_mem_𝔻 : (0 : ℂ) ∈ 𝔻 := mem_𝔻_iff.mpr (by norm_num)
+
+/-- The Taylor coefficients of a constant function. -/
+theorem taylorCoeff_const (c : ℂ) (n : ℕ) :
+    taylorCoeff (fun _ : ℂ => c) n = if n = 0 then c else 0 := by
+  unfold taylorCoeff
+  rw [iteratedDeriv_const]
+  split_ifs with h <;> simp [h]
+
+/-! ## Closure of `HasGaussianIntCoeffs` under the ring operations -/
+
+theorem hasGaussianIntCoeffs_zero : HasGaussianIntCoeffs (fun _ : ℂ => (0 : ℂ)) :=
+  fun n => ⟨0, by rw [taylorCoeff_const]; split_ifs <;> simp⟩
+
+theorem hasGaussianIntCoeffs_one : HasGaussianIntCoeffs (fun _ : ℂ => (1 : ℂ)) := by
+  intro n
+  by_cases hn : n = 0
+  · exact ⟨1, by rw [taylorCoeff_const, if_pos hn]; simp⟩
+  · exact ⟨0, by rw [taylorCoeff_const, if_neg hn]; simp⟩
+
+theorem hasGaussianIntCoeffs_add {f g : ℂ → ℂ} (hf : HolomorphicOn f) (hg : HolomorphicOn g)
+    (hfi : HasGaussianIntCoeffs f) (hgi : HasGaussianIntCoeffs g) :
+    HasGaussianIntCoeffs (fun z => f z + g z) := by
+  intro n
+  obtain ⟨zf, hzf⟩ := hfi n
+  obtain ⟨zg, hzg⟩ := hgi n
+  exact ⟨zf + zg, by
+    rw [taylorCoeff_add (hf 0 zero_mem_𝔻) (hg 0 zero_mem_𝔻), hzf, hzg, GaussianInt.toComplex_add]⟩
+
+theorem hasGaussianIntCoeffs_neg {f : ℂ → ℂ} (hfi : HasGaussianIntCoeffs f) :
+    HasGaussianIntCoeffs (fun z => -f z) := by
+  intro n
+  obtain ⟨zf, hzf⟩ := hfi n
+  exact ⟨-zf, by rw [taylorCoeff_neg f n, hzf, GaussianInt.toComplex_neg]⟩
+
+theorem hasGaussianIntCoeffs_mul {f g : ℂ → ℂ} (hf : HolomorphicOn f) (hg : HolomorphicOn g)
+    (hfi : HasGaussianIntCoeffs f) (hgi : HasGaussianIntCoeffs g) :
+    HasGaussianIntCoeffs (fun z => f z * g z) := by
+  intro n
+  choose zf hzf using hfi
+  choose zg hzg using hgi
+  refine ⟨∑ i ∈ Finset.range (n + 1), zf i * zg (n - i), ?_⟩
+  rw [taylorCoeff_mul (hf 0 zero_mem_𝔻) (hg 0 zero_mem_𝔻), map_sum]
+  exact Finset.sum_congr rfl (fun i _ => by rw [map_mul, hzf i, hzg (n - i)])
+
+/-! ## Closure of `HasIntCoeffs` under the ring operations -/
+
+theorem hasIntCoeffs_zero : HasIntCoeffs (fun _ : ℂ => (0 : ℂ)) :=
+  fun n => ⟨0, by rw [taylorCoeff_const]; split_ifs <;> simp⟩
+
+theorem hasIntCoeffs_one : HasIntCoeffs (fun _ : ℂ => (1 : ℂ)) := by
+  intro n
+  by_cases hn : n = 0
+  · exact ⟨1, by rw [taylorCoeff_const, if_pos hn]; simp⟩
+  · exact ⟨0, by rw [taylorCoeff_const, if_neg hn]; simp⟩
+
+theorem hasIntCoeffs_add {f g : ℂ → ℂ} (hf : HolomorphicOn f) (hg : HolomorphicOn g)
+    (hfi : HasIntCoeffs f) (hgi : HasIntCoeffs g) :
+    HasIntCoeffs (fun z => f z + g z) := by
+  intro n
+  obtain ⟨kf, hkf⟩ := hfi n
+  obtain ⟨kg, hkg⟩ := hgi n
+  exact ⟨kf + kg, by
+    rw [taylorCoeff_add (hf 0 zero_mem_𝔻) (hg 0 zero_mem_𝔻), hkf, hkg]; push_cast; ring⟩
+
+theorem hasIntCoeffs_neg {f : ℂ → ℂ} (hfi : HasIntCoeffs f) :
+    HasIntCoeffs (fun z => -f z) := by
+  intro n
+  obtain ⟨kf, hkf⟩ := hfi n
+  exact ⟨-kf, by rw [taylorCoeff_neg f n, hkf]; push_cast; ring⟩
+
+theorem hasIntCoeffs_mul {f g : ℂ → ℂ} (hf : HolomorphicOn f) (hg : HolomorphicOn g)
+    (hfi : HasIntCoeffs f) (hgi : HasIntCoeffs g) :
+    HasIntCoeffs (fun z => f z * g z) := by
+  intro n
+  choose kf hkf using hfi
+  choose kg hkg using hgi
+  refine ⟨∑ i ∈ Finset.range (n + 1), kf i * kg (n - i), ?_⟩
+  rw [taylorCoeff_mul (hf 0 zero_mem_𝔻) (hg 0 zero_mem_𝔻)]
+  push_cast
+  exact Finset.sum_congr rfl (fun i _ => by rw [hkf i, hkg (n - i)])
+
+/-! ## Proposition `prop:nv`: nowhere-vanishing functions with `ℤ[i]`-coefficients -/
+
+/-- **Proposition `prop:nv`.** Given a sequence `a : ℕ → ℂ` lying outside the closed unit
+disk with `‖a n‖ → 1`, there is a holomorphic function on `𝔻` with Taylor coefficients in
+`ℤ[i]`, nowhere vanishing on `𝔻`, with value `1` at the origin. -/
+theorem exists_holomorphic_gaussianInt_coeffs_nowhereVanishing
+    (a : ℕ → ℂ) (ha1 : ∀ n, 1 < ‖a n‖)
+    (_hesc : Filter.Tendsto (fun n => ‖a n‖) Filter.atTop (nhds 1)) :
+    ∃ f : ℂ → ℂ, HolomorphicOn f ∧ HasGaussianIntCoeffs f ∧ (∀ z ∈ 𝔻, f z ≠ 0) ∧ f 0 = 1 := by
+  have ha0 : ∀ k, a k ≠ 0 := fun k h => by
+    have := ha1 k; rw [h] at this; norm_num at this
+  have hesc_empty : ∀ s : ℝ, s < 1 → {k | ‖a k‖ < s}.Finite := by
+    intro s hs
+    have hempty : {k | ‖a k‖ < s} = ∅ := by
+      ext k
+      simp only [Set.mem_setOf_eq, Set.mem_empty_iff_false, iff_false]
+      intro hlt; linarith [ha1 k]
+    rw [hempty]; exact Set.finite_empty
+  obtain ⟨c, hcforce, hcbound⟩ := exists_coeffSeq a ha0
+  have hM := exists_Mtest_of_coeffSeq a c ha0 hesc_empty hcbound
+  set g : ℂ → ℂ := fun z => ∏' k, E k (c k) (z / a k) with hg_def
+  have hg_holo : HolomorphicOn g := holomorphicOn_tprod_factors (n := id) hM
+  refine ⟨g, hg_holo, ?_, ?_, ?_⟩
+  · -- `HasGaussianIntCoeffs g`
+    intro p
+    obtain ⟨zp, hzp⟩ := hcforce p
+    refine ⟨zp, ?_⟩
+    have hstep1 : taylorCoeff g p = taylorCoeff (partialProduct a c (p + 1 + 1)) p :=
+      taylorCoeff_tprod_factors_eq_partial (n := id) monotone_id hM p (p + 1)
+        (show p < p + 1 by omega)
+    have hshrink : ∀ N, p ≤ N →
+        taylorCoeff (partialProduct a c (N + 1)) p = taylorCoeff (partialProduct a c N) p := by
+      intro N hN
+      have hanalytic : AnalyticAt ℂ (partialProduct a c N) 0 := by
+        have : Differentiable ℂ (partialProduct a c N) := by unfold partialProduct E; fun_prop
+        exact this.analyticAt 0
+      rw [partialProduct_succ]
+      exact taylorCoeff_mul_E_eq_of_le hanalytic hN
+    rw [hstep1, hshrink (p + 1) (by omega), hshrink p le_rfl, hzp]
+  · -- nowhere vanishing on `𝔻`
+    intro z hz
+    have hg_analytic : AnalyticAt ℂ g z := hg_holo z hz
+    have hg_order : analyticOrderAt g z = ({k | a k = z}.ncard : ℕ∞) :=
+      analyticOrderAt_tprod_factors_eq_ncard (n := id) ha0 hM z hz
+    have hempty : {k | a k = z} = ∅ := by
+      ext k
+      simp only [Set.mem_setOf_eq, Set.mem_empty_iff_false, iff_false]
+      intro hak
+      have h1 : ‖z‖ < 1 := mem_𝔻_iff.mp hz
+      have h2 : 1 < ‖a k‖ := ha1 k
+      rw [hak] at h2; linarith
+    rw [hempty, Set.ncard_empty] at hg_order
+    exact hg_analytic.analyticOrderAt_eq_zero.mp (by exact_mod_cast hg_order)
+  · -- `g 0 = 1`
+    have hstep : taylorCoeff g 0 = taylorCoeff (partialProduct a c 2) 0 :=
+      taylorCoeff_tprod_factors_eq_partial (n := id) monotone_id hM 0 1
+        (show (0 : ℕ) < 1 by omega)
+    have hval : taylorCoeff (partialProduct a c 2) 0 = (partialProduct a c 2) 0 := by
+      unfold taylorCoeff; simp
+    have hprod0 : (partialProduct a c 2) 0 = 1 := by
+      unfold partialProduct; simp [E_zero]
+    have hgval : taylorCoeff g 0 = g 0 := by unfold taylorCoeff; simp
+    rw [← hgval, hstep, hval, hprod0]
+
+/-! ## Proposition `prop:units`: the reciprocal-power-series recursion -/
+
+/-- The `0`-th Taylor coefficient of any function is its value at `0`. -/
+theorem taylorCoeff_zero_eq (f : ℂ → ℂ) : taylorCoeff f 0 = f 0 := by
+  unfold taylorCoeff; simp
+
+/-- Auxiliary "history table" for the reciprocal-power-series recursion: `reciprocalSeqAux u r N`
+records the first `N + 1` terms of the sequence, built by ordinary structural recursion on `N`
+(the memoized-history device used elsewhere in this project for recursions depending on more
+than the immediately preceding term, e.g. `auxP`/`auxQ`). -/
+private noncomputable def reciprocalSeqAux {R : Type*} [CommRing R] (u : Rˣ) (r : ℕ → R) :
+    ℕ → ℕ → R
+  | 0, _ => ((u⁻¹ : Rˣ) : R)
+  | (N + 1), k =>
+      if k ≤ N then reciprocalSeqAux u r N k
+      else -((u⁻¹ : Rˣ) : R)
+        * ∑ j ∈ Finset.range (N + 1), r (j + 1) * reciprocalSeqAux u r N (N - j)
+
+/-- The reciprocal-power-series coefficients: the unique sequence `s` with `s 0 = u⁻¹` and
+`s (n+1) = -u⁻¹ · ∑_{k=0}^{n} r (k+1) · s (n-k)`, matching the formal recursion for the
+reciprocal of a power series `∑ r n z ^ n` with unit constant term `u`. -/
+private noncomputable def reciprocalSeq {R : Type*} [CommRing R] (u : Rˣ) (r : ℕ → R) (n : ℕ) :
+    R :=
+  reciprocalSeqAux u r n n
+
+private theorem reciprocalSeqAux_stable {R : Type*} [CommRing R] (u : Rˣ) (r : ℕ → R)
+    (N k : ℕ) (hk : k ≤ N) : reciprocalSeqAux u r (N + 1) k = reciprocalSeqAux u r N k := by
+  simp only [reciprocalSeqAux, if_pos hk]
+
+private theorem reciprocalSeqAux_eq_reciprocalSeq {R : Type*} [CommRing R] (u : Rˣ) (r : ℕ → R) :
+    ∀ N k, k ≤ N → reciprocalSeqAux u r N k = reciprocalSeq u r k := by
+  intro N
+  induction N with
+  | zero =>
+      intro k hk
+      have hk0 : k = 0 := by omega
+      subst hk0; rfl
+  | succ N ih =>
+      intro k hk
+      rcases Nat.lt_or_ge k (N + 1) with hlt | hge
+      · exact (reciprocalSeqAux_stable u r N k (by omega)).trans (ih k (by omega))
+      · have : k = N + 1 := by omega
+        subst this; rfl
+
+private theorem reciprocalSeq_zero {R : Type*} [CommRing R] (u : Rˣ) (r : ℕ → R) :
+    reciprocalSeq u r 0 = ((u⁻¹ : Rˣ) : R) := rfl
+
+private theorem reciprocalSeq_succ {R : Type*} [CommRing R] (u : Rˣ) (r : ℕ → R) (N : ℕ) :
+    reciprocalSeq u r (N + 1)
+      = -((u⁻¹ : Rˣ) : R) * ∑ j ∈ Finset.range (N + 1), r (j + 1) * reciprocalSeq u r (N - j) := by
+  have hunfold : reciprocalSeq u r (N + 1)
+      = -((u⁻¹ : Rˣ) : R)
+        * ∑ j ∈ Finset.range (N + 1), r (j + 1) * reciprocalSeqAux u r N (N - j) := by
+    change reciprocalSeqAux u r (N + 1) (N + 1) = _
+    simp only [reciprocalSeqAux, if_neg (show ¬ N + 1 ≤ N by omega)]
+  rw [hunfold]
+  congr 1
+  refine Finset.sum_congr rfl (fun j hj => ?_)
+  rw [reciprocalSeqAux_eq_reciprocalSeq u r N (N - j) (Nat.sub_le N j)]
+
+/-- **The reciprocal-power-series argument underlying Proposition `prop:units`.** If `f` is
+holomorphic and nowhere-vanishing on `𝔻`, its Taylor coefficients all lie in the image of an
+injective-on-units ring hom `φ : R →+* ℂ` (via a sequence `r`), and `f 0` is the image of a
+*unit* `u` of `R`, then the Taylor coefficients of `1/f` also all lie in the image of `φ`. This
+is the "formal inverse of a unit-constant-term power series stays integral" fact used to show
+that the reciprocal of a unit of `ℛ` (or `ℛ_ℝ`) again lies in `ℛ` (or `ℛ_ℝ`). -/
+theorem hasCoeffsIn_inv {R : Type*} [CommRing R] (φ : R →+* ℂ)
+    {f : ℂ → ℂ} (hf : HolomorphicOn f) (hfnv : ∀ z ∈ 𝔻, f z ≠ 0)
+    (r : ℕ → R) (hr : ∀ n, taylorCoeff f n = φ (r n)) (u : Rˣ) (hu : φ (u : R) = f 0) :
+    ∀ n, taylorCoeff (fun z => (f z)⁻¹) n = φ (reciprocalSeq u r n) := by
+  have hf0ne : f 0 ≠ 0 := hfnv 0 zero_mem_𝔻
+  have hf_at0 : AnalyticAt ℂ f 0 := hf 0 zero_mem_𝔻
+  have hfinv_at0 : AnalyticAt ℂ (fun z => (f z)⁻¹) 0 := hf_at0.inv hf0ne
+  have h𝔻nhds : 𝔻 ∈ nhds (0 : ℂ) := Metric.isOpen_ball.mem_nhds zero_mem_𝔻
+  have hfg_ev : (fun z => f z * (f z)⁻¹) =ᶠ[nhds (0 : ℂ)] (fun _ : ℂ => (1 : ℂ)) := by
+    filter_upwards [h𝔻nhds] with z hz
+    exact mul_inv_cancel₀ (hfnv z hz)
+  intro n
+  induction n using Nat.strong_induction_on with
+  | _ n ih =>
+    have htaylor_eq :
+        taylorCoeff (fun z => f z * (f z)⁻¹) n = taylorCoeff (fun _ : ℂ => (1 : ℂ)) n := by
+      unfold taylorCoeff
+      exact congrArg (· / (Nat.factorial n : ℂ))
+        (eventuallyEq_iteratedDeriv_of_eventuallyEq hfg_ev n).self_of_nhds
+    rw [taylorCoeff_mul hf_at0 hfinv_at0 n, taylorCoeff_const, Finset.sum_range_succ',
+      Nat.sub_zero] at htaylor_eq
+    rw [taylorCoeff_zero_eq f] at htaylor_eq
+    rcases n with _ | m
+    · -- base case `n = 0`
+      simp only [Finset.range_zero, Finset.sum_empty, zero_add] at htaylor_eq
+      norm_num at htaylor_eq
+      rw [reciprocalSeq_zero]
+      have hfu : φ (u : R) * φ ((u⁻¹ : Rˣ) : R) = 1 := by
+        rw [← map_mul, Units.mul_inv, map_one]
+      rw [hu] at hfu
+      exact mul_left_cancel₀ hf0ne (htaylor_eq.trans hfu.symm)
+    · -- inductive step `n = m + 1`
+      have hsub : ∀ i ∈ Finset.range (m + 1), (m + 1) - (i + 1) = m - i := by
+        intro i hi; have : i ≤ m := Nat.lt_succ_iff.mp (Finset.mem_range.mp hi); omega
+      rw [Finset.sum_congr rfl (fun i hi => by rw [hsub i hi])] at htaylor_eq
+      simp only [if_neg (Nat.succ_ne_zero m)] at htaylor_eq
+      have hsum_eq : ∑ i ∈ Finset.range (m + 1), taylorCoeff f (i + 1) * taylorCoeff
+          (fun z => (f z)⁻¹) (m - i) = φ (∑ i ∈ Finset.range (m + 1), r (i + 1)
+            * reciprocalSeq u r (m - i)) := by
+        rw [map_sum]
+        refine Finset.sum_congr rfl (fun i hi => ?_)
+        have him : m - i ≤ m := Nat.sub_le m i
+        rw [map_mul, hr (i + 1), ih (m - i) (by omega)]
+      rw [hsum_eq] at htaylor_eq
+      have hSeq : ∑ i ∈ Finset.range (m + 1), r (i + 1) * reciprocalSeq u r (m - i)
+          = -((u : Rˣ) : R) * reciprocalSeq u r (m + 1) := by
+        rw [reciprocalSeq_succ u r m, ← mul_assoc]
+        have hu2 : -((u : Rˣ) : R) * -((u⁻¹ : Rˣ) : R) = 1 := by
+          rw [neg_mul_neg, Units.mul_inv]
+        rw [hu2, one_mul]
+      rw [hSeq, map_mul, map_neg, hu] at htaylor_eq
+      have : f 0 * taylorCoeff (fun z => (f z)⁻¹) (m + 1)
+          = f 0 * φ (reciprocalSeq u r (m + 1)) := by linear_combination htaylor_eq
+      exact mul_left_cancel₀ hf0ne this
+
+/-! ## Proposition `prop:units`: units of `ℛ` and `ℛ_ℝ` -/
+
+/-- `f` is a unit of `ℛ = ℤ[i][[z]] ∩ 𝒪(𝔻)`: it lies in `ℛ` and has a multiplicative inverse
+that also lies in `ℛ`. -/
+def IsUnitOfGaussianIntRing (f : ℂ → ℂ) : Prop :=
+  HolomorphicOn f ∧ HasGaussianIntCoeffs f ∧
+    ∃ g : ℂ → ℂ, HolomorphicOn g ∧ HasGaussianIntCoeffs g ∧ ∀ z ∈ 𝔻, f z * g z = 1
+
+/-- `f` is a unit of `ℛ_ℝ = ℤ[[z]] ∩ 𝒪(𝔻)`. -/
+def IsUnitOfIntRing (f : ℂ → ℂ) : Prop :=
+  HolomorphicOn f ∧ HasIntCoeffs f ∧
+    ∃ g : ℂ → ℂ, HolomorphicOn g ∧ HasIntCoeffs g ∧ ∀ z ∈ 𝔻, f z * g z = 1
+
+/-- **Proposition `prop:units` (Gaussian-integer half).** An element `f` of `ℛ` is a unit iff
+`f 0 ∈ ℤ[i]ˣ` and `f` is nowhere-vanishing on `𝔻`. -/
+theorem isUnitOfGaussianIntRing_iff {f : ℂ → ℂ} (hf : HolomorphicOn f)
+    (hfi : HasGaussianIntCoeffs f) :
+    IsUnitOfGaussianIntRing f ↔
+      (∃ u : GaussianInt, f 0 = (u : ℂ) ∧ IsUnit u) ∧ (∀ z ∈ 𝔻, f z ≠ 0) := by
+  constructor
+  · rintro ⟨-, -, g, -, hgi, hfg⟩
+    refine ⟨?_, fun z hz hcontra => by
+      have := hfg z hz; rw [hcontra, zero_mul] at this; exact absurd this.symm one_ne_zero⟩
+    obtain ⟨zf, hzf⟩ := hfi 0
+    obtain ⟨zg, hzg⟩ := hgi 0
+    rw [taylorCoeff_zero_eq] at hzf hzg
+    have h01 := hfg 0 zero_mem_𝔻
+    rw [hzf, hzg] at h01
+    have heq : ((zf * zg : GaussianInt) : ℂ) = ((1 : GaussianInt) : ℂ) := by
+      rw [GaussianInt.toComplex_mul, GaussianInt.toComplex_one]; exact h01
+    exact ⟨zf, hzf, IsUnit.of_mul_eq_one zg (GaussianInt.toComplex_inj.mp heq)⟩
+  · rintro ⟨⟨u0, hfu0, u, hu⟩, hfnv⟩
+    have hf0ne : f 0 ≠ 0 := hfnv 0 zero_mem_𝔻
+    have hfi' := hfi
+    choose zr hzr using hfi'
+    have hphiu : GaussianInt.toComplex (u : GaussianInt) = f 0 := by rw [hu, ← hfu0]
+    refine ⟨hf, hfi, fun z => (f z)⁻¹, fun z hz => (hf z hz).inv (hfnv z hz), ?_,
+      fun z hz => mul_inv_cancel₀ (hfnv z hz)⟩
+    intro n
+    exact ⟨reciprocalSeq u zr n, hasCoeffsIn_inv GaussianInt.toComplex hf hfnv zr hzr u hphiu n⟩
+
+/-- **Proposition `prop:units` (integer half).** An element `f` of `ℛ_ℝ` is a unit iff
+`f 0 ∈ ℤˣ = \{\pm 1\}` and `f` is nowhere-vanishing on `𝔻`. -/
+theorem isUnitOfIntRing_iff {f : ℂ → ℂ} (hf : HolomorphicOn f) (hfi : HasIntCoeffs f) :
+    IsUnitOfIntRing f ↔
+      (∃ u : ℤ, f 0 = (u : ℂ) ∧ IsUnit u) ∧ (∀ z ∈ 𝔻, f z ≠ 0) := by
+  constructor
+  · rintro ⟨-, -, g, -, hgi, hfg⟩
+    refine ⟨?_, fun z hz hcontra => by
+      have := hfg z hz; rw [hcontra, zero_mul] at this; exact absurd this.symm one_ne_zero⟩
+    obtain ⟨kf, hkf⟩ := hfi 0
+    obtain ⟨kg, hkg⟩ := hgi 0
+    rw [taylorCoeff_zero_eq] at hkf hkg
+    have h01 := hfg 0 zero_mem_𝔻
+    rw [hkf, hkg] at h01
+    have heq : ((kf * kg : ℤ) : ℂ) = ((1 : ℤ) : ℂ) := by push_cast; exact h01
+    exact ⟨kf, hkf, IsUnit.of_mul_eq_one kg (by exact_mod_cast heq)⟩
+  · rintro ⟨⟨u0, hfu0, u, hu⟩, hfnv⟩
+    have hf0ne : f 0 ≠ 0 := hfnv 0 zero_mem_𝔻
+    have hfi' := hfi
+    choose kr hkr using hfi'
+    have hphiu : ((u : ℤ) : ℂ) = f 0 := by rw [hu, ← hfu0]
+    refine ⟨hf, hfi, fun z => (f z)⁻¹, fun z hz => (hf z hz).inv (hfnv z hz), ?_,
+      fun z hz => mul_inv_cancel₀ (hfnv z hz)⟩
+    intro n
+    exact ⟨reciprocalSeq u kr n,
+      hasCoeffsIn_inv (Int.castRingHom ℂ) hf hfnv kr hkr u hphiu n⟩
+
+/-! ## Proposition `prop:associate`: factorization up to units in `𝒪(𝔻)` -/
+
+/-- `𝔻` is preconnected (it is a ball, hence convex). -/
+theorem isPreconnected_𝔻 : IsPreconnected 𝔻 := (convex_ball (0 : ℂ) 1).isPreconnected
+
+/-- If `f` is holomorphic on `𝔻` and not identically zero there, its analytic order is finite
+at every point of `𝔻`: by the identity theorem, `f` cannot vanish identically near any point of
+the connected set `𝔻` without vanishing identically everywhere on `𝔻`. -/
+theorem analyticOrderAt_ne_top_of_ne_zero_somewhere {f : ℂ → ℂ} (hf : HolomorphicOn f)
+    (hfne : ∃ z ∈ 𝔻, f z ≠ 0) {z₀ : ℂ} (hz₀ : z₀ ∈ 𝔻) : analyticOrderAt f z₀ ≠ ⊤ := by
+  intro htop
+  rw [analyticOrderAt_eq_top] at htop
+  have hzero : Set.EqOn f 0 𝔻 :=
+    hf.eqOn_zero_of_preconnected_of_eventuallyEq_zero isPreconnected_𝔻 hz₀ htop
+  obtain ⟨z, hzD, hzne⟩ := hfne
+  exact hzne (hzero hzD)
+
+/-- **The zero divisor of a holomorphic function that is not identically zero.** Its support is
+locally finite by the identity theorem: a not-identically-zero analytic function on the connected
+set `𝔻` has isolated zeros, hence meets every compact subset in only finitely many of them. -/
+noncomputable def zeroDivisorOfHolomorphic (f : ℂ → ℂ) (hf : HolomorphicOn f)
+    (hfne : ∃ z ∈ 𝔻, f z ≠ 0) : EffectiveDivisor where
+  mult z := @ite _ (z ∈ 𝔻) (Classical.propDecidable _) (analyticOrderNatAt f z) 0
+  mult_eq_zero_of_not_mem_𝔻 z hz := if_neg hz
+  finite_inter_compact K hKsub hKcpt := by
+    rcases hf.eqOn_zero_or_eventually_ne_zero_of_preconnected isPreconnected_𝔻 with hz0 | hev
+    · obtain ⟨z, hzD, hzne⟩ := hfne
+      exact absurd (hz0 hzD) hzne
+    · have hmemK : {x : ℂ | f x ≠ 0} ∈ Filter.codiscreteWithin K :=
+        Filter.codiscreteWithin_mono hKsub hev
+      have hfin := hKcpt.finite_sdiff_of_mem_codiscreteWithin hmemK
+      refine Set.Finite.subset hfin (fun z hz => ?_)
+      obtain ⟨hzK, hzmult⟩ := hz
+      have hzD : z ∈ 𝔻 := hKsub hzK
+      rw [if_pos hzD] at hzmult
+      have hfz0 : f z = 0 := apply_eq_zero_of_analyticOrderNatAt_ne_zero hzmult
+      simp only [Set.mem_sdiff, Set.mem_setOf_eq, not_not]
+      exact ⟨hzK, hfz0⟩
+
+/-- The divisor `zeroDivisorOfHolomorphic f hf hfne` is indeed the zero divisor of `f`. -/
+theorem isZeroDivisorOf_zeroDivisorOfHolomorphic (f : ℂ → ℂ) (hf : HolomorphicOn f)
+    (hfne : ∃ z ∈ 𝔻, f z ≠ 0) :
+    IsZeroDivisorOf (zeroDivisorOfHolomorphic f hf hfne) f := by
+  classical
+  intro z hz
+  change (if z ∈ 𝔻 then analyticOrderNatAt f z else 0) = analyticOrderNatAt f z
+  rw [if_pos hz]
+
+/-- If `f` is holomorphic on `𝔻` and has finite analytic order at *one* point of `𝔻`, it has
+finite analytic order at *every* point of `𝔻` (it cannot be identically zero near that one
+point without being identically zero everywhere, by the identity theorem). -/
+theorem analyticOrderAt_ne_top_of_analyticOrderAt_ne_top_at {f : ℂ → ℂ} (hf : HolomorphicOn f)
+    {z₁ : ℂ} (hz₁ : z₁ ∈ 𝔻) (hfin : analyticOrderAt f z₁ ≠ ⊤) {z₀ : ℂ} (hz₀ : z₀ ∈ 𝔻) :
+    analyticOrderAt f z₀ ≠ ⊤ := by
+  intro htop
+  rw [analyticOrderAt_eq_top] at htop
+  have hzero : Set.EqOn f 0 𝔻 :=
+    hf.eqOn_zero_of_preconnected_of_eventuallyEq_zero isPreconnected_𝔻 hz₀ htop
+  apply hfin
+  rw [analyticOrderAt_eq_top]
+  filter_upwards [Metric.isOpen_ball.mem_nhds hz₁] with z hz using hzero hz
+
+/-- At a common zero of `f` and `g` of the same finite order, the ratio `f / g` has a
+removable singularity with a nonzero limit. -/
+theorem exists_tendsto_div_nhdsWithin_ne_of_analyticOrderNatAt_eq
+    {f g : ℂ → ℂ} {z₀ : ℂ} (hf : AnalyticAt ℂ f z₀) (hg : AnalyticAt ℂ g z₀)
+    (hf_fin : analyticOrderAt f z₀ ≠ ⊤) (hg_fin : analyticOrderAt g z₀ ≠ ⊤)
+    (horder : analyticOrderNatAt f z₀ = analyticOrderNatAt g z₀) :
+    ∃ L : ℂ, L ≠ 0 ∧ Tendsto (fun w => f w / g w) (𝓝[≠] z₀) (𝓝 L) := by
+  set n := analyticOrderNatAt f z₀ with hn_def
+  obtain ⟨f₁, hf₁_an, hf₁_ne, hf₁_eq⟩ := (hf.analyticOrderNatAt_eq_iff hf_fin).mp rfl
+  obtain ⟨g₁, hg₁_an, hg₁_ne, hg₁_eq⟩ :=
+    (hg.analyticOrderNatAt_eq_iff hg_fin (n := n)).mp horder.symm
+  refine ⟨f₁ z₀ / g₁ z₀, div_ne_zero hf₁_ne hg₁_ne, ?_⟩
+  have htendsto_quot : Tendsto (fun w => f₁ w / g₁ w) (𝓝[≠] z₀) (𝓝 (f₁ z₀ / g₁ z₀)) :=
+    (hf₁_an.continuousAt.tendsto.mono_left nhdsWithin_le_nhds).div
+      (hg₁_an.continuousAt.tendsto.mono_left nhdsWithin_le_nhds) hg₁_ne
+  refine htendsto_quot.congr' ?_
+  filter_upwards [hf₁_eq.filter_mono nhdsWithin_le_nhds, hg₁_eq.filter_mono nhdsWithin_le_nhds,
+    self_mem_nhdsWithin] with w hfw hgw hwne
+  have hpow_ne : (w - z₀) ^ n ≠ 0 := pow_ne_zero n (sub_ne_zero.mpr hwne)
+  rw [hfw, hgw, smul_eq_mul, smul_eq_mul, mul_div_mul_left _ _ hpow_ne]
+
+/-- **The key analytic lemma behind Proposition `prop:associate`.** If `f, g` are holomorphic
+on `𝔻`, have the same analytic order at every point, and this common order is nonzero
+somewhere (so neither is identically zero), then `f / g` extends to a holomorphic,
+nowhere-vanishing function `u` on `𝔻` with `f = g * u` throughout: at a common zero of `f` and
+`g`, the ratio `f / g` has a removable singularity with nonzero limit. -/
+theorem exists_holomorphicOn_nowhereVanishing_mul_eq_of_analyticOrderNatAt_eq
+    {f g : ℂ → ℂ} (hf : HolomorphicOn f) (hg : HolomorphicOn g)
+    (horder : ∀ z ∈ 𝔻, analyticOrderNatAt f z = analyticOrderNatAt g z)
+    (hsomepos : ∃ z ∈ 𝔻, analyticOrderNatAt f z ≠ 0) :
+    ∃ u : ℂ → ℂ, HolomorphicOn u ∧ (∀ z ∈ 𝔻, u z ≠ 0) ∧ ∀ z ∈ 𝔻, f z = g z * u z := by
+  classical
+  obtain ⟨z₁, hz₁, hz₁ne⟩ := hsomepos
+  have hf_fin1 : analyticOrderAt f z₁ ≠ ⊤ := fun h => hz₁ne (by simp [analyticOrderNatAt, h])
+  have hg_fin1 : analyticOrderAt g z₁ ≠ ⊤ := fun h => by
+    apply hz₁ne; rw [horder z₁ hz₁]; simp [analyticOrderNatAt, h]
+  have hf_fin : ∀ z ∈ 𝔻, analyticOrderAt f z ≠ ⊤ :=
+    fun z hz => analyticOrderAt_ne_top_of_analyticOrderAt_ne_top_at hf hz₁ hf_fin1 hz
+  have hg_fin : ∀ z ∈ 𝔻, analyticOrderAt g z ≠ ⊤ :=
+    fun z hz => analyticOrderAt_ne_top_of_analyticOrderAt_ne_top_at hg hz₁ hg_fin1 hz
+  -- the naive quotient, corrected by its limit at removable singularities
+  set u : ℂ → ℂ := fun z => if g z ≠ 0 then f z / g z else limUnder (𝓝[≠] z) (fun w => f w / g w)
+    with hu_def
+  have hu_eq_div : ∀ z, g z ≠ 0 → u z = f z / g z := fun z hz => by rw [hu_def]; simp [hz]
+  -- at a zero of `g`, both `f` and `g` vanish (matching orders), and `u z` is the nonzero limit
+  have hg_zero_imp : ∀ z ∈ 𝔻, g z = 0 → f z = 0 ∧ ∃ L, L ≠ 0 ∧
+      Tendsto (fun w => f w / g w) (𝓝[≠] z) (𝓝 L) ∧ u z = L ∧ ∀ᶠ w in 𝓝[≠] z, g w ≠ 0 := by
+    intro z hz hgz
+    have hgorder_ne : analyticOrderNatAt g z ≠ 0 := by
+      intro h0
+      have hcast := Nat.cast_analyticOrderNatAt (hg_fin z hz)
+      rw [h0] at hcast
+      exact (analyticOrderAt_ne_zero.mpr ⟨hg z hz, hgz⟩) (by exact_mod_cast hcast.symm)
+    have hforder_ne : analyticOrderNatAt f z ≠ 0 := by rw [horder z hz]; exact hgorder_ne
+    have hforder_ne' : analyticOrderAt f z ≠ 0 := by
+      intro h0
+      apply hforder_ne
+      have hfcast := Nat.cast_analyticOrderNatAt (hf_fin z hz)
+      rw [h0] at hfcast
+      exact_mod_cast hfcast
+    have hfz0 : f z = 0 := (analyticOrderAt_ne_zero.mp hforder_ne').2
+    obtain ⟨L, hLne, hLtendsto⟩ := exists_tendsto_div_nhdsWithin_ne_of_analyticOrderNatAt_eq
+      (hf z hz) (hg z hz) (hf_fin z hz) (hg_fin z hz) (horder z hz)
+    have hg_ev_ne : ∀ᶠ w in 𝓝[≠] z, g w ≠ 0 := by
+      rcases (hg z hz).eventually_eq_zero_or_eventually_ne_zero with h0 | hne
+      · exact absurd (analyticOrderAt_eq_top.mpr h0) (hg_fin z hz)
+      · exact hne
+    have huz : u z = L := by
+      have hu_eq : u z = limUnder (𝓝[≠] z) (fun w => f w / g w) := by
+        rw [hu_def]; exact if_neg (by simp [hgz])
+      rw [hu_eq]; exact hLtendsto.limUnder_eq
+    exact ⟨hfz0, L, hLne, hLtendsto, huz, hg_ev_ne⟩
+  refine ⟨u, fun z hz => ?_, fun z hz => ?_, fun z hz => ?_⟩
+  · -- `HolomorphicOn u`
+    by_cases hgz : g z = 0
+    · obtain ⟨hfz0, L, hLne, hLtendsto, huz, hg_ev_ne⟩ := hg_zero_imp z hz hgz
+      have hg_ev_ne' : ∀ᶠ w in 𝓝 z, w ≠ z → g w ≠ 0 := eventually_nhdsWithin_iff.mp hg_ev_ne
+      have hu_eq_update : u =ᶠ[𝓝 z] Function.update (fun w => f w / g w) z L := by
+        filter_upwards [hg_ev_ne'] with w hw
+        by_cases hwz : w = z
+        · subst hwz; rw [huz, Function.update_self]
+        · rw [hu_eq_div w (hw hwz), Function.update_of_ne hwz]
+      have hu_cont : ContinuousAt u z :=
+        (continuousAt_update_same.mpr hLtendsto).congr hu_eq_update.symm
+      have hu_diff : ∀ᶠ w in 𝓝[≠] z, DifferentiableAt ℂ u w := by
+        have h𝔻nhds : 𝔻 ∈ 𝓝 z := Metric.isOpen_ball.mem_nhds hz
+        filter_upwards [hg_ev_ne, mem_nhdsWithin_of_mem_nhds h𝔻nhds] with w hgw hwD
+        have hu_eq_near : u =ᶠ[𝓝 w] (fun v => f v / g v) := by
+          filter_upwards [(hg w hwD).continuousAt.eventually_ne hgw] with v hv
+          exact hu_eq_div v hv
+        exact ((hf w hwD).div (hg w hwD) hgw).differentiableAt.congr_of_eventuallyEq hu_eq_near
+      exact Complex.analyticAt_of_differentiable_on_punctured_nhds_of_continuousAt hu_diff hu_cont
+    · have hu_eq_near : u =ᶠ[𝓝 z] (fun w => f w / g w) := by
+        filter_upwards [(hg z hz).continuousAt.eventually_ne hgz] with w hw
+        exact hu_eq_div w hw
+      exact ((hf z hz).div (hg z hz) hgz).congr hu_eq_near.symm
+  · -- `∀ z ∈ 𝔻, u z ≠ 0`
+    by_cases hgz : g z = 0
+    · obtain ⟨-, L, hLne, -, huz, -⟩ := hg_zero_imp z hz hgz
+      rw [huz]; exact hLne
+    · rw [hu_eq_div z hgz]
+      have hgorder0 : analyticOrderAt g z = 0 := analyticOrderAt_eq_zero.mpr (Or.inr hgz)
+      have hforder0 : analyticOrderAt f z = 0 := by
+        have hgcast : (analyticOrderNatAt g z : ℕ∞) = 0 := by
+          rw [Nat.cast_analyticOrderNatAt (hg_fin z hz), hgorder0]
+        have hgnat0 : analyticOrderNatAt g z = 0 := by exact_mod_cast hgcast
+        have hfnat0 : analyticOrderNatAt f z = 0 := by rw [horder z hz]; exact hgnat0
+        have hfcast : (analyticOrderNatAt f z : ℕ∞) = analyticOrderAt f z :=
+          Nat.cast_analyticOrderNatAt (hf_fin z hz)
+        rw [hfnat0] at hfcast
+        exact hfcast.symm
+      have hfz_ne : f z ≠ 0 := by
+        rcases analyticOrderAt_eq_zero.mp hforder0 with h | h
+        · exact absurd (hf z hz) h
+        · exact h
+      exact div_ne_zero hfz_ne hgz
+  · -- `∀ z ∈ 𝔻, f z = g z * u z`
+    by_cases hgz : g z = 0
+    · obtain ⟨hfz0, -, -, -, -, -⟩ := hg_zero_imp z hz hgz
+      rw [hfz0, hgz, zero_mul]
+    · rw [hu_eq_div z hgz, mul_div_cancel₀ _ hgz]
+
+/-- **Proposition `prop:associate` (Factorization up to units in `𝒪(𝔻)`).** Every `f ∈ 𝒪(𝔻)`
+can be written `f = g * u` with `g ∈ ℛ` and `u ∈ 𝒪(𝔻)ˣ` (holomorphic and nowhere-vanishing). -/
+theorem exists_hasGaussianIntCoeffs_mul_nowhereVanishing (f : ℂ → ℂ) (hf : HolomorphicOn f) :
+    ∃ g u : ℂ → ℂ, HolomorphicOn g ∧ HasGaussianIntCoeffs g ∧
+      HolomorphicOn u ∧ (∀ z ∈ 𝔻, u z ≠ 0) ∧ ∀ z ∈ 𝔻, f z = g z * u z := by
+  by_cases hfzero : ∀ z ∈ 𝔻, f z = 0
+  · -- `f ≡ 0` on `𝔻`: take `g = 0`, `u = 1`.
+    exact ⟨fun _ => 0, fun _ => 1, fun _ _ => analyticAt_const, hasGaussianIntCoeffs_zero,
+      fun _ _ => analyticAt_const, fun _ _ => one_ne_zero,
+      fun z hz => by rw [hfzero z hz]; ring⟩
+  · push Not at hfzero
+    by_cases hfnv : ∀ z ∈ 𝔻, f z ≠ 0
+    · -- `f` is already nowhere-vanishing: take `g = 1`, `u = f`.
+      exact ⟨fun _ => 1, f, fun _ _ => analyticAt_const, hasGaussianIntCoeffs_one, hf, hfnv,
+        fun z _ => by ring⟩
+    · -- `f` has at least one zero: apply Theorem `prop:Zi` to its zero divisor.
+      push Not at hfnv
+      obtain ⟨z0, hz0D, hfz0⟩ := hfnv
+      have hfne : ∃ z ∈ 𝔻, f z ≠ 0 := hfzero
+      set Df := zeroDivisorOfHolomorphic f hf hfne with hDf_def
+      have hIsZDf : IsZeroDivisorOf Df f := isZeroDivisorOf_zeroDivisorOfHolomorphic f hf hfne
+      obtain ⟨g, hg_holo, hg_zd, hg_int⟩ :=
+        exists_holomorphic_gaussianInt_coeffs_of_effectiveDivisor Df
+      have horder : ∀ z ∈ 𝔻, analyticOrderNatAt f z = analyticOrderNatAt g z := by
+        intro z hz; rw [← hIsZDf z hz, ← hg_zd z hz]
+      have hsomepos : ∃ z ∈ 𝔻, analyticOrderNatAt f z ≠ 0 := by
+        refine ⟨z0, hz0D, fun h0 => ?_⟩
+        have hcast : (analyticOrderNatAt f z0 : ℕ∞) = 0 := by exact_mod_cast h0
+        rw [Nat.cast_analyticOrderNatAt (analyticOrderAt_ne_top_of_ne_zero_somewhere hf hfne hz0D)]
+          at hcast
+        exact (analyticOrderAt_ne_zero.mpr ⟨hf z0 hz0D, hfz0⟩) hcast
+      obtain ⟨u, hu_holo, hu_nv, hu_eq⟩ :=
+        exists_holomorphicOn_nowhereVanishing_mul_eq_of_analyticOrderNatAt_eq
+          hf hg_holo horder hsomepos
+      exact ⟨g, u, hg_holo, hg_int, hu_holo, hu_nv, hu_eq⟩
+
+/-! ## Corollary `cor:ideals`: every ideal of `𝒪(𝔻)` is generated by its `ℛ`-elements -/
+
+/-- An ideal of `𝒪(𝔻)`: a set of holomorphic functions on `𝔻`, closed under addition, absorbing
+multiplication by any element of `𝒪(𝔻)`, and depending only on behavior on `𝔻` (since elements
+of `𝒪(𝔻)` are functions on `𝔻`, represented here by arbitrary total extensions to `ℂ`). -/
+structure IsIdealOD (I : Set (ℂ → ℂ)) : Prop where
+  zero_mem : (fun _ : ℂ => (0 : ℂ)) ∈ I
+  subset_holomorphic : ∀ f ∈ I, HolomorphicOn f
+  add_mem : ∀ f ∈ I, ∀ g ∈ I, (fun z => f z + g z) ∈ I
+  smul_mem : ∀ h, HolomorphicOn h → ∀ f ∈ I, (fun z => h z * f z) ∈ I
+  congr_on_𝔻 : ∀ f ∈ I, ∀ f', HolomorphicOn f' → Set.EqOn f f' 𝔻 → f' ∈ I
+
+/-- **Corollary `cor:ideals`.** Every ideal `I` of `𝒪(𝔻)` satisfies `I = (I ∩ ℛ) · 𝒪(𝔻)`: an
+`f ∈ 𝒪(𝔻)` lies in `I` if and only if it factors as `f = g * u` with `g ∈ I` a `ℛ`-element and
+`u ∈ 𝒪(𝔻)`. -/
+theorem cor_ideals {I : Set (ℂ → ℂ)} (hI : IsIdealOD I) {f : ℂ → ℂ} (hf : HolomorphicOn f) :
+    f ∈ I ↔ ∃ g u : ℂ → ℂ, g ∈ I ∧ HasGaussianIntCoeffs g ∧ HolomorphicOn u ∧
+      ∀ z ∈ 𝔻, f z = g z * u z := by
+  constructor
+  · intro hfI
+    obtain ⟨g, u, hg_holo, hg_int, hu_holo, hu_nv, hu_eq⟩ :=
+      exists_hasGaussianIntCoeffs_mul_nowhereVanishing f hf
+    have hu_inv_holo : HolomorphicOn (fun z => (u z)⁻¹) :=
+      fun z hz => (hu_holo z hz).inv (hu_nv z hz)
+    have hg_mem : (fun z => (u z)⁻¹ * f z) ∈ I := hI.smul_mem _ hu_inv_holo f hfI
+    have hg_eq : Set.EqOn (fun z => (u z)⁻¹ * f z) g 𝔻 := by
+      intro z hz
+      change (u z)⁻¹ * f z = g z
+      rw [hu_eq z hz, mul_comm (g z) (u z), ← mul_assoc, inv_mul_cancel₀ (hu_nv z hz), one_mul]
+    have hgI : g ∈ I := hI.congr_on_𝔻 _ hg_mem g hg_holo hg_eq
+    exact ⟨g, u, hgI, hg_int, hu_holo, hu_eq⟩
+  · rintro ⟨g, u, hgI, -, hu_holo, hfeq⟩
+    have hprod_mem : (fun z => u z * g z) ∈ I := hI.smul_mem u hu_holo g hgI
+    refine hI.congr_on_𝔻 _ hprod_mem f hf (fun z hz => ?_)
+    rw [hfeq z hz, mul_comm]
+
+/-! ## Proposition `prop:inject`: injectivity of the contraction map -/
+
+/-- `m` is a maximal ideal of `𝒪(𝔻)`. -/
+structure IsMaximalIdealOD (m : Set (ℂ → ℂ)) : Prop where
+  isIdeal : IsIdealOD m
+  proper : m ≠ {f | HolomorphicOn f}
+  maximal : ∀ J, IsIdealOD J → m ⊆ J → J = m ∨ J = {f | HolomorphicOn f}
+
+/-- **Proposition `prop:inject`.** The contraction map `φ : 𝔪 ↦ 𝔪 ∩ ℛ`, from maximal ideals of
+`𝒪(𝔻)` to (the carriers of) prime ideals of `ℛ`, is injective. -/
+theorem prop_inject {m m' : Set (ℂ → ℂ)} (hm : IsMaximalIdealOD m) (hm' : IsMaximalIdealOD m')
+    (hcontract : {f | f ∈ m ∧ HasGaussianIntCoeffs f} = {f | f ∈ m' ∧ HasGaussianIntCoeffs f}) :
+    m = m' := by
+  have hsub : ∀ {a a' : Set (ℂ → ℂ)}, IsMaximalIdealOD a → IsMaximalIdealOD a' →
+      {f | f ∈ a ∧ HasGaussianIntCoeffs f} = {f | f ∈ a' ∧ HasGaussianIntCoeffs f} → a ⊆ a' := by
+    intro a a' ha ha' hcon f hfa
+    obtain ⟨g, u, hg_holo, hg_int, hu_holo, hu_nv, hu_eq⟩ :=
+      exists_hasGaussianIntCoeffs_mul_nowhereVanishing f (ha.isIdeal.subset_holomorphic f hfa)
+    have hu_inv_holo : HolomorphicOn (fun z => (u z)⁻¹) :=
+      fun z hz => (hu_holo z hz).inv (hu_nv z hz)
+    have hg_mem_a : (fun z => (u z)⁻¹ * f z) ∈ a := ha.isIdeal.smul_mem _ hu_inv_holo f hfa
+    have hg_eq : Set.EqOn (fun z => (u z)⁻¹ * f z) g 𝔻 := by
+      intro z hz
+      change (u z)⁻¹ * f z = g z
+      rw [hu_eq z hz, mul_comm (g z) (u z), ← mul_assoc, inv_mul_cancel₀ (hu_nv z hz), one_mul]
+    have hgA : g ∈ a := ha.isIdeal.congr_on_𝔻 _ hg_mem_a g hg_holo hg_eq
+    have hgA' : g ∈ a' := by
+      have hmem : g ∈ {f | f ∈ a ∧ HasGaussianIntCoeffs f} := ⟨hgA, hg_int⟩
+      rw [hcon] at hmem
+      exact hmem.1
+    have hprod_mem : (fun z => u z * g z) ∈ a' := ha'.isIdeal.smul_mem u hu_holo g hgA'
+    refine ha'.isIdeal.congr_on_𝔻 _ hprod_mem f (ha.isIdeal.subset_holomorphic f hfa)
+      (fun z hz => ?_)
+    rw [hu_eq z hz, mul_comm]
+  have hmm' : m ⊆ m' := hsub hm hm' hcontract
+  have hm'm : m' ⊆ m := hsub hm' hm hcontract.symm
+  rcases hm.maximal m' hm'.isIdeal hmm' with heq | htop
+  · exact heq.symm
+  · exact absurd htop hm'.proper
+
+/-! ## Proposition `prop:fiber`: the augmentation ideal -/
+
+theorem hasGaussianIntCoeffs_const (z : GaussianInt) :
+    HasGaussianIntCoeffs (fun _ : ℂ => (z : ℂ)) := by
+  intro n
+  rw [taylorCoeff_const]
+  by_cases hn : n = 0
+  · exact ⟨z, by simp [hn]⟩
+  · exact ⟨0, by simp [hn, GaussianInt.toComplex_zero]⟩
+
+theorem hasGaussianIntCoeffs_id : HasGaussianIntCoeffs (fun z : ℂ => z) := by
+  intro n
+  unfold taylorCoeff
+  rw [iteratedDeriv_fun_id_zero]
+  by_cases hn : n = 1
+  · exact ⟨1, by simp [hn]⟩
+  · exact ⟨0, by simp [hn]⟩
+
+/-- **The augmentation ideal `𝔫₀ = {f ∈ ℛ : f(0) = 0}`.** -/
+def augmentationIdeal : Set (ℂ → ℂ) := {f | HolomorphicOn f ∧ HasGaussianIntCoeffs f ∧ f 0 = 0}
+
+/-- **`𝔪₀ = ker(ev₀) ⊂ 𝒪(𝔻)`**, the ideal of functions vanishing at the origin. -/
+def evalZeroIdeal : Set (ℂ → ℂ) := {f | HolomorphicOn f ∧ f 0 = 0}
+
+/-- If `f` is holomorphic on `𝔻` and `f(0) = 0`, then `f = z · h` on `𝔻` for a holomorphic `h`
+(namely `dslope f 0`, whose defining property `sub_smul_dslope_of_zero` gives this directly). -/
+theorem exists_holomorphic_eq_id_mul_of_eval_zero {f : ℂ → ℂ} (hf : HolomorphicOn f)
+    (hf0 : f 0 = 0) : ∃ h : ℂ → ℂ, HolomorphicOn h ∧ ∀ z ∈ 𝔻, f z = z * h z := by
+  refine ⟨dslope f 0, fun z hz => ?_, fun z _ => ?_⟩
+  · by_cases hz0 : z = 0
+    · subst hz0
+      have h𝔻nhds : 𝔻 ∈ 𝓝 (0 : ℂ) := Metric.isOpen_ball.mem_nhds hz
+      have hdiff : ∀ᶠ w in 𝓝[≠] (0 : ℂ), DifferentiableAt ℂ (dslope f 0) w := by
+        filter_upwards [mem_nhdsWithin_of_mem_nhds h𝔻nhds, self_mem_nhdsWithin]
+          with w hwD hwne
+        exact (differentiableAt_dslope_of_ne hwne).mpr (hf w hwD).differentiableAt
+      have hcont : ContinuousAt (dslope f 0) 0 :=
+        continuousAt_dslope_same.mpr (hf 0 hz).differentiableAt
+      exact Complex.analyticAt_of_differentiable_on_punctured_nhds_of_continuousAt hdiff hcont
+    · have hzD : z ∈ 𝔻 := hz
+      set s : Set ℂ := 𝔻 ∩ {w : ℂ | w ≠ 0} with hs_def
+      have hsopen : IsOpen s := Metric.isOpen_ball.inter isOpen_ne
+      have hsmem : s ∈ 𝓝 z := hsopen.mem_nhds ⟨hzD, hz0⟩
+      have hdiffOn : DifferentiableOn ℂ (dslope f 0) s := by
+        intro w hw
+        exact ((differentiableAt_dslope_of_ne hw.2).mpr
+          (hf w hw.1).differentiableAt).differentiableWithinAt
+      exact hdiffOn.analyticAt hsmem
+  · have := sub_smul_dslope_of_zero hf0 z
+    rw [smul_eq_mul, sub_zero] at this
+    exact this.symm
+
+theorem isIdealOD_evalZeroIdeal : IsIdealOD evalZeroIdeal where
+  zero_mem := ⟨fun _ _ => analyticAt_const, rfl⟩
+  subset_holomorphic := fun f hf => hf.1
+  add_mem := fun f hf g hg => ⟨fun z hz => (hf.1 z hz).add (hg.1 z hz), by
+    change f 0 + g 0 = 0; rw [hf.2, hg.2]; ring⟩
+  smul_mem := fun h hh f hf => ⟨fun z hz => (hh z hz).mul (hf.1 z hz), by
+    change h 0 * f 0 = 0; rw [hf.2]; ring⟩
+  congr_on_𝔻 := fun f hf f' hf' heq => ⟨hf', by rw [← heq zero_mem_𝔻]; exact hf.2⟩
+
+/-- **Proposition `prop:fiber`, maximality of `𝔪₀`.** `evalZeroIdeal` is a maximal ideal of
+`𝒪(𝔻)`. -/
+theorem isMaximalIdealOD_evalZeroIdeal : IsMaximalIdealOD evalZeroIdeal where
+  isIdeal := isIdealOD_evalZeroIdeal
+  proper := by
+    intro hcontra
+    have h1 : (fun _ : ℂ => (1 : ℂ)) ∈ evalZeroIdeal := by
+      rw [hcontra]
+      exact fun _ _ => analyticAt_const
+    exact one_ne_zero h1.2
+  maximal := by
+    intro J hJ hsub
+    by_cases hJeq : J = evalZeroIdeal
+    · exact Or.inl hJeq
+    · refine Or.inr ?_
+      have : ∃ f ∈ J, f 0 ≠ 0 := by
+        by_contra hcon
+        push Not at hcon
+        apply hJeq
+        refine Set.Subset.antisymm ?_ hsub
+        intro f hfJ
+        exact ⟨hJ.subset_holomorphic f hfJ, hcon f hfJ⟩
+      obtain ⟨f, hfJ, hf0⟩ := this
+      have hf_holo : HolomorphicOn f := hJ.subset_holomorphic f hfJ
+      set c : ℂ := f 0 with hc_def
+      have hc_holo : HolomorphicOn (fun _ : ℂ => c) := fun _ _ => analyticAt_const
+      have hneg_mem : (fun z => (-1 : ℂ) * c) ∈ J := by
+        have := hJ.smul_mem (fun _ => (-1 : ℂ)) (fun _ _ => analyticAt_const) (fun _ => c)
+        apply this
+        have hcmem : (fun z : ℂ => f z - c) ∈ evalZeroIdeal := by
+          refine ⟨(hf_holo.sub hc_holo), ?_⟩
+          change f 0 - c = 0; rw [hc_def]; ring
+        have hg_mem : (fun z : ℂ => f z - c) ∈ J := hsub hcmem
+        have hfsub : (fun z : ℂ => f z + (-1 : ℂ) * (f z - c)) ∈ J :=
+          hJ.add_mem f hfJ (fun z => (-1 : ℂ) * (f z - c))
+            (hJ.smul_mem (fun _ => (-1 : ℂ)) (fun _ _ => analyticAt_const) _ hg_mem)
+        have heqc : (fun z : ℂ => f z + (-1 : ℂ) * (f z - c)) = (fun _ : ℂ => c) := by
+          funext z; ring
+        rwa [heqc] at hfsub
+      have hone_mem : (fun _ : ℂ => (1 : ℂ)) ∈ J := by
+        have hcinv : (fun _ : ℂ => c⁻¹) ∈ (Set.univ : Set (ℂ → ℂ)) := trivial
+        have := hJ.smul_mem (fun _ => c⁻¹) (fun _ _ => analyticAt_const)
+          (fun _ => (-1 : ℂ) * c) hneg_mem
+        have heq1 : (fun z : ℂ => c⁻¹ * ((-1 : ℂ) * c)) = (fun _ : ℂ => (-1 : ℂ)) := by
+          funext z; field_simp
+        rw [heq1] at this
+        have := hJ.smul_mem (fun _ => (-1 : ℂ)) (fun _ _ => analyticAt_const) _ this
+        have heq2 : (fun z : ℂ => (-1 : ℂ) * (-1 : ℂ)) = (fun _ : ℂ => (1 : ℂ)) := by
+          funext z; ring
+        rwa [heq2] at this
+      ext f'
+      simp only [Set.mem_setOf_eq]
+      refine ⟨hJ.subset_holomorphic f', fun hf'_holo => ?_⟩
+      have hf'_eq : f' = fun z => f' z * (1 : ℂ) := by funext z; ring
+      rw [hf'_eq]
+      exact hJ.smul_mem f' hf'_holo _ hone_mem
+
+/-- **`φ(𝔪₀) = 𝔫₀`.** The contraction of `𝔪₀ = ker(ev₀)` is exactly the augmentation ideal. -/
+theorem contraction_evalZeroIdeal_eq_augmentationIdeal :
+    {f | f ∈ evalZeroIdeal ∧ HasGaussianIntCoeffs f} = augmentationIdeal := by
+  ext f
+  constructor
+  · rintro ⟨⟨hf_holo, hf0⟩, hf_int⟩
+    exact ⟨hf_holo, hf_int, hf0⟩
+  · rintro ⟨hf_holo, hf_int, hf0⟩
+    exact ⟨⟨hf_holo, hf0⟩, hf_int⟩
+
+/-- **Proposition `prop:fiber`, first part (evaluation surjects onto `ℤ[i]`).** Every Gaussian
+integer arises as the value at `0` of some element of `ℛ`; together with `augmentationIdeal`
+being (by definition) exactly the kernel of this evaluation, this is the content of
+`ℛ / 𝔫₀ ≅ ℤ[i]`. -/
+theorem exists_holomorphic_gaussianIntCoeffs_eval_eq (z : GaussianInt) :
+    ∃ f : ℂ → ℂ, HolomorphicOn f ∧ HasGaussianIntCoeffs f ∧ f 0 = (z : ℂ) :=
+  ⟨fun _ => (z : ℂ), fun _ _ => analyticAt_const, hasGaussianIntCoeffs_const z, rfl⟩
+
+/-- **Proposition `prop:fiber`, third part.** If `𝔪` is a maximal ideal of `𝒪(𝔻)` whose
+contraction `𝔪 ∩ ℛ` contains the augmentation ideal `𝔫₀`, then in fact `𝔪 ∩ ℛ = 𝔫₀`: no prime of
+`ℛ` *strictly* containing `𝔫₀` arises as a contraction. -/
+theorem contraction_eq_augmentationIdeal_of_superset {m : Set (ℂ → ℂ)} (hm : IsMaximalIdealOD m)
+    (hsuper : augmentationIdeal ⊆ {f | f ∈ m ∧ HasGaussianIntCoeffs f}) :
+    {f | f ∈ m ∧ HasGaussianIntCoeffs f} = augmentationIdeal := by
+  have hid_mem_aug : (fun z : ℂ => z) ∈ augmentationIdeal :=
+    ⟨fun _ _ => analyticAt_id, hasGaussianIntCoeffs_id, rfl⟩
+  have hid_mem_m : (fun z : ℂ => z) ∈ m := (hsuper hid_mem_aug).1
+  have hevalZero_sub_m : evalZeroIdeal ⊆ m := by
+    intro f hf
+    obtain ⟨h, hh_holo, hfh⟩ := exists_holomorphic_eq_id_mul_of_eval_zero hf.1 hf.2
+    have hprod_mem : (fun z => h z * z) ∈ m := hm.isIdeal.smul_mem h hh_holo _ hid_mem_m
+    exact hm.isIdeal.congr_on_𝔻 _ hprod_mem f hf.1 (fun z hz => by rw [hfh z hz, mul_comm])
+  rcases isMaximalIdealOD_evalZeroIdeal.maximal m hm.isIdeal hevalZero_sub_m with heq | htop
+  · rw [heq, contraction_evalZeroIdeal_eq_augmentationIdeal]
+  · exact absurd htop hm.proper
+
+/-! ## Proposition `prop:fiber`, second part: primes of `ℛ` containing `𝔫₀`
+biject with `Spec(ℤ[i])` -/
+
+/-- An ideal of `ℛ = ℤ[i][[z]] ∩ 𝒪(𝔻)`. -/
+structure IsIdealOfGaussianIntRing (I : Set (ℂ → ℂ)) : Prop where
+  zero_mem : (fun _ : ℂ => (0 : ℂ)) ∈ I
+  subset_R : ∀ f ∈ I, HolomorphicOn f ∧ HasGaussianIntCoeffs f
+  add_mem : ∀ f ∈ I, ∀ g ∈ I, (fun z => f z + g z) ∈ I
+  smul_mem : ∀ h, HolomorphicOn h → HasGaussianIntCoeffs h → ∀ f ∈ I, (fun z => h z * f z) ∈ I
+  congr_on_𝔻 : ∀ f ∈ I, ∀ f', HolomorphicOn f' → HasGaussianIntCoeffs f' →
+    Set.EqOn f f' 𝔻 → f' ∈ I
+
+/-- A prime ideal of `ℛ`. -/
+structure IsPrimeIdealOfGaussianIntRing (p : Set (ℂ → ℂ)) : Prop where
+  isIdeal : IsIdealOfGaussianIntRing p
+  ne_top : p ≠ {f | HolomorphicOn f ∧ HasGaussianIntCoeffs f}
+  mem_or_mem : ∀ f, HolomorphicOn f → HasGaussianIntCoeffs f → ∀ g, HolomorphicOn g →
+    HasGaussianIntCoeffs g → (fun z => f z * g z) ∈ p → f ∈ p ∨ g ∈ p
+
+theorem isIdealOfGaussianIntRing_augmentationIdeal :
+    IsIdealOfGaussianIntRing augmentationIdeal where
+  zero_mem := ⟨fun _ _ => analyticAt_const, hasGaussianIntCoeffs_zero, rfl⟩
+  subset_R := fun f hf => ⟨hf.1, hf.2.1⟩
+  add_mem := fun f hf g hg =>
+    ⟨fun z hz => (hf.1 z hz).add (hg.1 z hz),
+      hasGaussianIntCoeffs_add hf.1 hg.1 hf.2.1 hg.2.1, by
+      change f 0 + g 0 = 0; rw [hf.2.2, hg.2.2]; ring⟩
+  smul_mem := fun h hh_holo hh_int f hf =>
+    ⟨fun z hz => (hh_holo z hz).mul (hf.1 z hz),
+      hasGaussianIntCoeffs_mul hh_holo hf.1 hh_int hf.2.1, by
+      change h 0 * f 0 = 0; rw [hf.2.2]; ring⟩
+  congr_on_𝔻 := fun f hf f' hf'_holo hf'_int heq =>
+    ⟨hf'_holo, hf'_int, by rw [← heq zero_mem_𝔻]; exact hf.2.2⟩
+
+theorem isPrimeIdealOfGaussianIntRing_augmentationIdeal :
+    IsPrimeIdealOfGaussianIntRing augmentationIdeal where
+  isIdeal := isIdealOfGaussianIntRing_augmentationIdeal
+  ne_top := by
+    intro hcontra
+    have h1 : (fun _ : ℂ => (1 : ℂ)) ∈ augmentationIdeal := by
+      rw [hcontra]; exact ⟨fun _ _ => analyticAt_const, hasGaussianIntCoeffs_one⟩
+    exact one_ne_zero h1.2.2
+  mem_or_mem := fun f hf_holo hf_int g hg_holo hg_int hfg => by
+    have h0 : f 0 * g 0 = 0 := hfg.2.2
+    rcases mul_eq_zero.mp h0 with h | h
+    · exact Or.inl ⟨hf_holo, hf_int, h⟩
+    · exact Or.inr ⟨hg_holo, hg_int, h⟩
+
+/-- The evaluation-at-`0` map from `ℛ` to `ℤ[i]`: the unique Gaussian integer equal to `f(0)` for
+`f` with Gaussian-integer Taylor coefficients (junk-valued `0` otherwise). -/
+noncomputable def ev0 (f : ℂ → ℂ) : GaussianInt :=
+  @dite GaussianInt (HasGaussianIntCoeffs f) (Classical.propDecidable _)
+    (fun h => Classical.choose (h 0)) (fun _ => 0)
+
+theorem ev0_eq {f : ℂ → ℂ} (hf : HasGaussianIntCoeffs f) : (ev0 f : ℂ) = f 0 := by
+  have hdite : ev0 f = Classical.choose (hf 0) := dif_pos hf
+  rw [hdite, ← taylorCoeff_zero_eq f]
+  exact (Classical.choose_spec (hf 0)).symm
+
+theorem ev0_of_hasGaussianIntCoeffs_eq {f : ℂ → ℂ} (hf : HasGaussianIntCoeffs f) {z : GaussianInt}
+    (heq : f 0 = (z : ℂ)) : ev0 f = z :=
+  GaussianInt.toComplex_inj.mp (by rw [ev0_eq hf, heq])
+
+theorem ev0_add {f g : ℂ → ℂ} (hf_holo : HolomorphicOn f) (hg_holo : HolomorphicOn g)
+    (hf_int : HasGaussianIntCoeffs f) (hg_int : HasGaussianIntCoeffs g) :
+    ev0 (fun z => f z + g z) = ev0 f + ev0 g := by
+  apply GaussianInt.toComplex_inj.mp
+  rw [ev0_eq (hasGaussianIntCoeffs_add hf_holo hg_holo hf_int hg_int), GaussianInt.toComplex_add,
+    ev0_eq hf_int, ev0_eq hg_int]
+
+theorem ev0_mul {f g : ℂ → ℂ} (hf_holo : HolomorphicOn f) (hg_holo : HolomorphicOn g)
+    (hf_int : HasGaussianIntCoeffs f) (hg_int : HasGaussianIntCoeffs g) :
+    ev0 (fun z => f z * g z) = ev0 f * ev0 g := by
+  apply GaussianInt.toComplex_inj.mp
+  rw [ev0_eq (hasGaussianIntCoeffs_mul hf_holo hg_holo hf_int hg_int), GaussianInt.toComplex_mul,
+    ev0_eq hf_int, ev0_eq hg_int]
+
+/-- The **pullback** of an ideal `q` of `ℤ[i]` along `ev₀`: `{f ∈ ℛ : ev₀(f) ∈ q}`. -/
+def pullbackIdeal (q : Ideal GaussianInt) : Set (ℂ → ℂ) :=
+  {f | HolomorphicOn f ∧ HasGaussianIntCoeffs f ∧ ev0 f ∈ q}
+
+theorem augmentationIdeal_subset_pullbackIdeal (q : Ideal GaussianInt) :
+    augmentationIdeal ⊆ pullbackIdeal q := by
+  rintro f ⟨hf_holo, hf_int, hf0⟩
+  refine ⟨hf_holo, hf_int, ?_⟩
+  rw [ev0_of_hasGaussianIntCoeffs_eq hf_int (by rw [hf0, GaussianInt.toComplex_zero])]
+  exact q.zero_mem
+
+theorem isIdealOfGaussianIntRing_pullbackIdeal (q : Ideal GaussianInt) :
+    IsIdealOfGaussianIntRing (pullbackIdeal q) where
+  zero_mem := augmentationIdeal_subset_pullbackIdeal q
+    ⟨fun _ _ => analyticAt_const, hasGaussianIntCoeffs_zero, rfl⟩
+  subset_R := fun f hf => ⟨hf.1, hf.2.1⟩
+  add_mem := fun f hf g hg =>
+    ⟨fun z hz => (hf.1 z hz).add (hg.1 z hz),
+      hasGaussianIntCoeffs_add hf.1 hg.1 hf.2.1 hg.2.1, by
+      rw [ev0_add hf.1 hg.1 hf.2.1 hg.2.1]
+      exact q.add_mem hf.2.2 hg.2.2⟩
+  smul_mem := fun h hh_holo hh_int f hf =>
+    ⟨fun z hz => (hh_holo z hz).mul (hf.1 z hz),
+      hasGaussianIntCoeffs_mul hh_holo hf.1 hh_int hf.2.1, by
+      rw [ev0_mul hh_holo hf.1 hh_int hf.2.1]
+      exact q.mul_mem_left _ hf.2.2⟩
+  congr_on_𝔻 := fun f hf f' hf'_holo hf'_int heq => by
+    refine ⟨hf'_holo, hf'_int, ?_⟩
+    have heval : ev0 f' = ev0 f :=
+      ev0_of_hasGaussianIntCoeffs_eq hf'_int (by rw [← heq zero_mem_𝔻, ev0_eq hf.2.1])
+    rw [heval]; exact hf.2.2
+
+theorem isPrimeIdealOfGaussianIntRing_pullbackIdeal {q : Ideal GaussianInt} (hq : q.IsPrime) :
+    IsPrimeIdealOfGaussianIntRing (pullbackIdeal q) where
+  isIdeal := isIdealOfGaussianIntRing_pullbackIdeal q
+  ne_top := by
+    intro hcontra
+    obtain ⟨c, hc⟩ := SetLike.exists_of_lt (lt_top_iff_ne_top.mpr hq.ne_top)
+    have hmem : (fun _ : ℂ => (c : ℂ)) ∈ pullbackIdeal q := by
+      rw [hcontra]; exact ⟨fun _ _ => analyticAt_const, hasGaussianIntCoeffs_const c⟩
+    apply hc.2
+    have := hmem.2.2
+    rwa [ev0_of_hasGaussianIntCoeffs_eq (hasGaussianIntCoeffs_const c) rfl] at this
+  mem_or_mem := fun f hf_holo hf_int g hg_holo hg_int hfg => by
+    have hmem : ev0 (fun z => f z * g z) ∈ q := hfg.2.2
+    rw [ev0_mul hf_holo hg_holo hf_int hg_int] at hmem
+    rcases hq.mem_or_mem hmem with h | h
+    · exact Or.inl ⟨hf_holo, hf_int, h⟩
+    · exact Or.inr ⟨hg_holo, hg_int, h⟩
+
+/-- The **pushforward** (image) of an ideal `p` of `ℛ` under `ev₀`. -/
+noncomputable def pushforwardIdeal (p : Set (ℂ → ℂ)) (hp : IsIdealOfGaussianIntRing p) :
+    Ideal GaussianInt where
+  carrier := {z : GaussianInt | ∃ f, HolomorphicOn f ∧ HasGaussianIntCoeffs f ∧ f ∈ p ∧ ev0 f = z}
+  zero_mem' := ⟨fun _ => 0, fun _ _ => analyticAt_const, hasGaussianIntCoeffs_zero, hp.zero_mem,
+    ev0_of_hasGaussianIntCoeffs_eq hasGaussianIntCoeffs_zero
+      (by rw [GaussianInt.toComplex_zero])⟩
+  add_mem' := by
+    rintro x y ⟨f, hf_holo, hf_int, hfp, hfev⟩ ⟨g, hg_holo, hg_int, hgp, hgev⟩
+    refine ⟨fun z => f z + g z, fun z hz => (hf_holo z hz).add (hg_holo z hz),
+      hasGaussianIntCoeffs_add hf_holo hg_holo hf_int hg_int, hp.add_mem f hfp g hgp, ?_⟩
+    rw [ev0_add hf_holo hg_holo hf_int hg_int, hfev, hgev]
+  smul_mem' := by
+    rintro c x ⟨f, hf_holo, hf_int, hfp, hfev⟩
+    obtain ⟨g, hg_holo, hg_int, hgeq⟩ := exists_holomorphic_gaussianIntCoeffs_eval_eq c
+    have hgev : ev0 g = c := ev0_of_hasGaussianIntCoeffs_eq hg_int hgeq
+    refine ⟨fun z => g z * f z, fun z hz => (hg_holo z hz).mul (hf_holo z hz),
+      hasGaussianIntCoeffs_mul hg_holo hf_holo hg_int hf_int,
+      hp.smul_mem g hg_holo hg_int f hfp, ?_⟩
+    change ev0 (fun z => g z * f z) = c • x
+    rw [ev0_mul hg_holo hf_holo hg_int hf_int, hgev, hfev, smul_eq_mul]
+
+/-- Two `ℛ`-elements with the same value of `ev₀` differ by an element of the augmentation
+ideal `𝔫₀`. -/
+theorem sub_mem_augmentationIdeal_of_ev0_eq {f g : ℂ → ℂ} (hf_holo : HolomorphicOn f)
+    (hg_holo : HolomorphicOn g) (hf_int : HasGaussianIntCoeffs f) (hg_int : HasGaussianIntCoeffs g)
+    (heval : ev0 f = ev0 g) : (fun z => f z + (-1 : ℂ) * g z) ∈ augmentationIdeal := by
+  have hc_holo : HolomorphicOn (fun _ : ℂ => (-1 : ℂ)) := fun _ _ => analyticAt_const
+  have hc_int : HasGaussianIntCoeffs (fun _ : ℂ => (-1 : ℂ)) := by
+    simpa using hasGaussianIntCoeffs_const (-1)
+  refine ⟨fun z hz => (hf_holo z hz).add ((hc_holo z hz).mul (hg_holo z hz)),
+    hasGaussianIntCoeffs_add hf_holo (fun z hz => (hc_holo z hz).mul (hg_holo z hz)) hf_int
+      (hasGaussianIntCoeffs_mul hc_holo hg_holo hc_int hg_int), ?_⟩
+  change f 0 + (-1 : ℂ) * g 0 = 0
+  have h1 := ev0_eq hf_int
+  have h2 := ev0_eq hg_int
+  rw [heval] at h1
+  rw [← h1, ← h2]; ring
+
+theorem isPrimeIdealOfGaussianIntRing_pushforwardIdeal {p : Set (ℂ → ℂ)}
+    (hp : IsPrimeIdealOfGaussianIntRing p) (haug : augmentationIdeal ⊆ p) :
+    (pushforwardIdeal p hp.isIdeal).IsPrime where
+  ne_top' := by
+    intro htop
+    have h1mem : (1 : GaussianInt) ∈ pushforwardIdeal p hp.isIdeal := htop ▸ Submodule.mem_top
+    obtain ⟨f1, hf1_holo, hf1_int, hf1p, hf1ev⟩ := h1mem
+    apply hp.ne_top
+    ext g
+    simp only [Set.mem_setOf_eq]
+    constructor
+    · exact fun _ => hp.isIdeal.subset_R g (by assumption)
+    · rintro ⟨hg_holo, hg_int⟩
+      have hgc_holo : HolomorphicOn (fun _ : ℂ => g 0) := fun _ _ => analyticAt_const
+      have hgc_int : HasGaussianIntCoeffs (fun _ : ℂ => g 0) := by
+        rw [← ev0_eq hg_int]; exact hasGaussianIntCoeffs_const (ev0 g)
+      have hprod_mem : (fun z => g 0 * f1 z) ∈ p := hp.isIdeal.smul_mem _ hgc_holo hgc_int f1 hf1p
+      have hev_eq : ev0 (fun z => g 0 * f1 z) = ev0 g := by
+        rw [ev0_mul hgc_holo hf1_holo hgc_int hf1_int, hf1ev, mul_one]
+        exact ev0_of_hasGaussianIntCoeffs_eq hgc_int (ev0_eq hg_int).symm
+      have hdiff_mem : (fun z => g z + (-1 : ℂ) * (g 0 * f1 z)) ∈ augmentationIdeal :=
+        sub_mem_augmentationIdeal_of_ev0_eq hg_holo (hgc_holo.mul hf1_holo) hg_int
+          (hasGaussianIntCoeffs_mul hgc_holo hf1_holo hgc_int hf1_int) hev_eq.symm
+      have hdiff_p : (fun z => g z + (-1 : ℂ) * (g 0 * f1 z)) ∈ p := haug hdiff_mem
+      have hg_eq : g = fun z => (g z + (-1 : ℂ) * (g 0 * f1 z)) + g 0 * f1 z := by
+        funext z; ring
+      rw [hg_eq]
+      exact hp.isIdeal.add_mem _ hdiff_p _ hprod_mem
+  mem_or_mem' := by
+    rintro x y ⟨h, hh_holo, hh_int, hhp, hhev⟩
+    obtain ⟨f, hf_holo, hf_int, hfeq⟩ := exists_holomorphic_gaussianIntCoeffs_eval_eq x
+    obtain ⟨g, hg_holo, hg_int, hgeq⟩ := exists_holomorphic_gaussianIntCoeffs_eval_eq y
+    have hfev : ev0 f = x := ev0_of_hasGaussianIntCoeffs_eq hf_int hfeq
+    have hgev : ev0 g = y := ev0_of_hasGaussianIntCoeffs_eq hg_int hgeq
+    have hprodev : ev0 (fun z => f z * g z) = ev0 h := by
+      rw [ev0_mul hf_holo hg_holo hf_int hg_int, hfev, hgev, hhev]
+    have hdiff_mem : (fun z => (fun w => f w * g w) z + (-1 : ℂ) * h z) ∈ augmentationIdeal :=
+      sub_mem_augmentationIdeal_of_ev0_eq (hf_holo.mul hg_holo) hh_holo
+        (hasGaussianIntCoeffs_mul hf_holo hg_holo hf_int hg_int) hh_int hprodev
+    have hdiff_p : (fun z => f z * g z + (-1 : ℂ) * h z) ∈ p := haug hdiff_mem
+    have hprod_eq : (fun z => f z * g z) = fun z => (f z * g z + (-1 : ℂ) * h z) + h z := by
+      funext z; ring
+    have hprod_p : (fun z => f z * g z) ∈ p := by
+      rw [hprod_eq]; exact hp.isIdeal.add_mem _ hdiff_p _ hhp
+    rcases hp.mem_or_mem f hf_holo hf_int g hg_holo hg_int hprod_p with hfp | hgp
+    · exact Or.inl ⟨f, hf_holo, hf_int, hfp, hfev⟩
+    · exact Or.inr ⟨g, hg_holo, hg_int, hgp, hgev⟩
+
+theorem pushforward_pullback (q : Ideal GaussianInt) :
+    pushforwardIdeal (pullbackIdeal q) (isIdealOfGaussianIntRing_pullbackIdeal q) = q := by
+  ext z
+  constructor
+  · rintro ⟨f, -, -, ⟨-, -, hfq⟩, hfev⟩
+    rw [← hfev]; exact hfq
+  · intro hz
+    obtain ⟨f, hf_holo, hf_int, hfeq⟩ := exists_holomorphic_gaussianIntCoeffs_eval_eq z
+    have hfev : ev0 f = z := ev0_of_hasGaussianIntCoeffs_eq hf_int hfeq
+    refine ⟨f, hf_holo, hf_int, ⟨hf_holo, hf_int, ?_⟩, hfev⟩
+    rw [hfev]; exact hz
+
+theorem pullback_pushforward {p : Set (ℂ → ℂ)} (hp : IsPrimeIdealOfGaussianIntRing p)
+    (haug : augmentationIdeal ⊆ p) :
+    pullbackIdeal (pushforwardIdeal p hp.isIdeal) = p := by
+  ext f
+  constructor
+  · rintro ⟨hf_holo, hf_int, h, hh_holo, hh_int, hhp, hhev⟩
+    have hd_mem_aug : (fun z => h z + (-1 : ℂ) * f z) ∈ augmentationIdeal :=
+      sub_mem_augmentationIdeal_of_ev0_eq hh_holo hf_holo hh_int hf_int hhev
+    have hd_p : (fun z => h z + (-1 : ℂ) * f z) ∈ p := haug hd_mem_aug
+    have hc_holo : HolomorphicOn (fun _ : ℂ => (-1 : ℂ)) := fun _ _ => analyticAt_const
+    have hc_int : HasGaussianIntCoeffs (fun _ : ℂ => (-1 : ℂ)) := by
+      simpa using hasGaussianIntCoeffs_const (-1)
+    have hnegd_p : (fun z => (-1 : ℂ) * (h z + (-1 : ℂ) * f z)) ∈ p :=
+      hp.isIdeal.smul_mem _ hc_holo hc_int _ hd_p
+    have hf_eq : f = fun z => h z + (-1 : ℂ) * (h z + (-1 : ℂ) * f z) := by funext z; ring
+    rw [hf_eq]
+    exact hp.isIdeal.add_mem h hhp _ hnegd_p
+  · intro hfp
+    obtain ⟨hf_holo, hf_int⟩ := hp.isIdeal.subset_R f hfp
+    exact ⟨hf_holo, hf_int, f, hf_holo, hf_int, hfp, rfl⟩
+
+/-- **Proposition `prop:fiber`, second part.** The primes of `ℛ` containing the augmentation
+ideal `𝔫₀` biject with `Spec(ℤ[i])`, via contraction/pullback along `ev₀ : ℛ → ℤ[i]`. -/
+noncomputable def primeIdealCorrespondence :
+    {p : Set (ℂ → ℂ) // IsPrimeIdealOfGaussianIntRing p ∧ augmentationIdeal ⊆ p} ≃
+      PrimeSpectrum GaussianInt where
+  toFun := fun ⟨p, hp, haug⟩ =>
+    ⟨pushforwardIdeal p hp.isIdeal, isPrimeIdealOfGaussianIntRing_pushforwardIdeal hp haug⟩
+  invFun := fun q => ⟨pullbackIdeal q.asIdeal,
+    isPrimeIdealOfGaussianIntRing_pullbackIdeal q.isPrime,
+    augmentationIdeal_subset_pullbackIdeal q.asIdeal⟩
+  left_inv := fun ⟨_, hp, haug⟩ => Subtype.ext (pullback_pushforward hp haug)
+  right_inv := fun q => PrimeSpectrum.ext (pushforward_pullback q.asIdeal)
+
+end Weierstrass
