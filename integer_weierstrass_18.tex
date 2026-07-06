@@ -1,4 +1,4 @@
-\documentclass[12pt]{amsart}
+\documentclass{amsart}
 
 \usepackage{amsmath, amssymb, amsthm}
 \usepackage{hyperref}
@@ -36,6 +36,11 @@
   New Hampshire, Durham, NH 03824}
 \email{david.feldman@unh.edu}
 
+\subjclass[2020]{Primary 30B10, 30C15; Secondary 30H50, 11C08}
+\keywords{Integer power series, prescribed zeros, effective divisor,
+  Weierstrass product, canonical product, complex conjugation,
+  Gaussian integers, function algebra}
+
 \thanks{Theorems~\ref{thm:main} and~\ref{prop:Zi} have been formalized
   and machine-checked in the Lean~4 proof assistant (no
   \texttt{sorry}s, no axioms beyond Mathlib's standard
@@ -46,8 +51,6 @@
 \date{}
 
 \begin{document}
-
-\maketitle
 
 \begin{abstract}
 We prove that a discrete effective divisor on the open unit disk $\D$
@@ -64,6 +67,8 @@ consequence, every holomorphic function on $\D$ differs from one with
 Gaussian-integer Taylor coefficients by multiplication by a
 nowhere-vanishing holomorphic factor.
 \end{abstract}
+
+\maketitle
 
 \section{Introduction}
 
@@ -113,13 +118,13 @@ functions, and the coefficient sequences can vary substantially with
 these choices.
 
 The technical heart of the paper is the following result, from which
-Theorem~\ref{thm:main} is deduced.  Write $\Zi = \Z[i]$ for the
-Gaussian integers.
+Theorem~\ref{thm:main} is deduced.
 
 \begin{theorem}[Gaussian-integer realization]
 \label{prop:Zi}
 Every effective divisor on $\D$ is the zero divisor of a holomorphic
-function on $\D$ with Taylor coefficients in $\Zi$.
+function on $\D$ with Taylor coefficients in the Gaussian integers
+$\Zi$.
 \end{theorem}
 
 Theorem~\ref{thm:main} follows from Theorem~\ref{prop:Zi} by a
