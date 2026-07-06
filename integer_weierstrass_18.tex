@@ -1,7 +1,9 @@
 \documentclass{amsart}
 
 \usepackage{amsmath, amssymb, amsthm}
+\PassOptionsToPackage{hyphens}{url}
 \usepackage{hyperref}
+\Urlmuskip=0mu plus 1mu\relax
 \usepackage{microtype}
 
 \newtheorem{theorem}{Theorem}
@@ -24,7 +26,7 @@
 \newcommand{\mR}{\mathcal{R}}
 \newcommand{\mRR}{\mathcal{R}_{\mathbb{R}}}
 
-\title{Integer Coefficients Power Series\\with Prescribed Zero Sets }
+\title{Integer-Coefficient Power Series with Prescribed Zero Sets}
 
 \author{Jon Bannon}
 \address{Department of Mathematics and Statistics, Siena University,
@@ -540,7 +542,7 @@ integer coefficients throughout the induction, without passing through a
 $\Zi$-coefficient intermediate.
 \end{remark}
 
-\begin{proposition}[Nowhere-vanishing functions with $\Zi$-coefficients]
+\begin{proposition}[Nowhere-vanishing $\Zi$-coefficient functions]
 \label{prop:nv}
 Let $\{a_n\}_{n=1}^{\infty} \subset \C \setminus \overline{\D}$ with
 $\abs{a_n} \to 1$.  There exists $f \in \OD$ with Taylor coefficients
@@ -787,7 +789,7 @@ $p \equiv 3 \pmod{4}$ remains inert, and $p=2$ ramifies.
 \section*{Tool and Computational Resource Disclosure}
 
 This manuscript was drafted and revised with the assistance of
-Claude (Anthropic; Claude Sonnet~5), a large language model used
+Claude (Anthropic; primarily Claude Opus~4.6), a large language model used
 interactively through Claude Code.  Claude contributed to composing
 and revising portions of the exposition, and produced the
 accompanying Lean~4 formalization of Theorems~\ref{thm:main}

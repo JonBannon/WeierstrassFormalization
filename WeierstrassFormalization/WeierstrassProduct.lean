@@ -28,9 +28,8 @@ Gaussian integer (rather than forcing the coefficient to `0`) is the bound
 the `‖a k‖ ^ (k+1)` shrinkage of `‖z / a k‖ ^ (k+1)` in the convergence estimate, giving a
 bound independent of how fast `a k` approaches the boundary.
 
-This file is organized as a sequence of lemmas mirroring the paper's proof structure. Several
-are stated but not yet proved (`sorry`); each docstring records exactly what it must establish
-and how it is meant to be used, so they can be tackled independently.
+This file is organized as a sequence of lemmas mirroring the paper's proof structure. Each
+docstring records exactly what the lemma establishes and how it is used in the construction.
 -/
 
 namespace Weierstrass

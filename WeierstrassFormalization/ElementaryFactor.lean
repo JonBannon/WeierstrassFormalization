@@ -389,8 +389,9 @@ theorem E_ne_zero {n : ℕ} {c w : ℂ} (hw : w ∈ 𝔻) : E n c w ≠ 0 := by
   unfold E
   exact mul_ne_zero (sub_ne_zero.mpr (Ne.symm hw1)) (Complex.exp_ne_zero _)
 
-/-- **Lemma `lem:structure` (v).** As an entire function, `E_n(·;c)` has a
-simple zero at `w = 1` and no other zeros. -/
+/-- **Lemma `lem:structure` (v).** As an entire function, `E_n(·;c)` vanishes
+only at `w = 1`. (The paper additionally notes this zero is simple; simplicity
+is unused in the construction and is not formalized here.) -/
 theorem E_zero_iff {n : ℕ} {c w : ℂ} : E n c w = 0 ↔ w = 1 := by
   unfold E
   rw [mul_eq_zero, sub_eq_zero, eq_comm]
